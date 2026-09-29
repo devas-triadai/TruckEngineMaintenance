@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: tatra_v8_nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - frontend
+    restart: always
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: tatra_v8_backend
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DATABASE_URL=sqlite+aiosqlite:////data/tatra_testbed.db
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    volumes:
+      - testbed_data:/data
+    restart: always
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: tatra_v8_frontend
+    environment:
+      - NODE_ENV=production
+    restart: always
+
+volumes:
+  testbed_data:
+    name: tatra_testbed_data

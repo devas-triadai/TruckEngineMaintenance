@@ -1,5 +1,5 @@
 /**
- * Telemetry data types for Tatra T3B-928 V8 Predictive Maintenance Testbed (TRL-5)
+ * Telemetry data types for Tatra T3B-928 V8 Predictive Maintenance Testbed (TRL-6)
  */
 
 export interface EngineState {
@@ -157,6 +157,63 @@ export interface GeminiDiagnosticReport {
   generated_at?: number;
 }
 
+export interface TestRun {
+  id: string;
+  engine_serial: string;
+  run_name: string;
+  operator_id: string;
+  start_time: string;
+  end_time?: string | null;
+  duration_seconds?: number | null;
+  initial_ehi: number;
+  min_ehi: number;
+  final_status: 'PASSED' | 'FLAGGED' | 'CRITICAL' | 'RECORDING';
+  primary_fault: string;
+  total_records: number;
+  max_rpm: number;
+  min_eop: number;
+  max_cht_delta: number;
+  max_kurtosis_x: number;
+  notes?: string;
+  diagnostic_events_count?: number;
+}
+
+export interface RecordingStatus {
+  is_recording: boolean;
+  active_run_id?: string | null;
+  run_name?: string;
+  engine_serial?: string;
+  operator_id?: string;
+  start_time?: string | null;
+  duration_seconds?: number;
+  total_records?: number;
+  min_ehi?: number;
+}
+
+export interface ReplayStatus {
+  is_active: boolean;
+  is_paused: boolean;
+  source_type: string;
+  source_name: string;
+  run_id?: string | null;
+  current_index: number;
+  total_frames: number;
+  progress_pct: number;
+  playback_speed: number;
+}
+
+export interface DiagnosticEventRecord {
+  id: number;
+  run_id: string;
+  timestamp: number;
+  trigger_type: string;
+  ehi_at_trigger: number;
+  criticality: string;
+  component_affected: string;
+  root_cause_hypothesis: string;
+  recommended_actions: string;
+}
+
 export interface TelemetryFrame {
   timestamp: number;
   source?: string;
@@ -166,4 +223,7 @@ export interface TelemetryFrame {
   ehi?: EngineHealthIndex;
   anomaly: AnomalyResult;
   stream_payload: StreamPayload;
+  hal_status?: any;
+  replay_status?: ReplayStatus;
+  recording_status?: RecordingStatus;
 }

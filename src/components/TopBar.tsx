@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, Cpu, RefreshCw, Radio, Sparkles, HardDrive, Zap } from 'lucide-react';
+import { Activity, Cpu, RefreshCw, Radio, Sparkles, HardDrive, FileText, Upload } from 'lucide-react';
 
 interface TopBarProps {
   activeTab: string;
@@ -13,6 +13,8 @@ interface TopBarProps {
   isRetraining: boolean;
   onOpenDiagnostics: () => void;
   hasDiagnosticAlert?: boolean;
+  onOpenHistory: () => void;
+  totalHistoricalRuns: number;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -26,7 +28,9 @@ export const TopBar: React.FC<TopBarProps> = ({
   onRetrainBaseline,
   isRetraining,
   onOpenDiagnostics,
-  hasDiagnosticAlert
+  hasDiagnosticAlert,
+  onOpenHistory,
+  totalHistoricalRuns
 }) => {
   const tabs = [
     { id: 'overview', label: 'Overview & Health' },
@@ -49,9 +53,9 @@ export const TopBar: React.FC<TopBarProps> = ({
             TATRA T3B-928 V8 TESTBED
           </a>
           <div className="flex items-center gap-2 text-xs text-slate-400">
-            <span className="text-cyan-400 font-semibold">TRL-5 Testbed Validation</span>
+            <span className="text-cyan-400 font-semibold">TRL-6 Operational Testbed</span>
             <span aria-hidden="true">·</span>
-            <span>NI-DAQ IEPE & J1939</span>
+            <span>BEML Engine Health System</span>
           </div>
         </div>
       </div>
@@ -76,9 +80,22 @@ export const TopBar: React.FC<TopBarProps> = ({
         })}
       </nav>
 
-      {/* Zone 3: 1-2 primary actions */}
+      {/* Zone 3: Actions */}
       <div className="flex items-center gap-2.5">
-        {/* HAL DAQ Source Selector (Simulator vs NI-DAQ/CAN Hardware) */}
+        {/* Runs & Reports Button */}
+        <button
+          onClick={onOpenHistory}
+          className="px-2.5 py-1.5 text-xs font-medium text-slate-300 bg-slate-900 hover:bg-slate-800 border border-slate-700/80 rounded-lg transition-colors whitespace-nowrap flex items-center gap-1.5 font-mono"
+          title="View recorded test runs and generate BEML PDF/CSV inspection reports"
+        >
+          <FileText className="w-3.5 h-3.5 text-cyan-400" />
+          <span className="hidden sm:inline">Runs & Reports</span>
+          <span className="bg-slate-800 px-1.5 py-0.2 rounded text-[10px] text-cyan-300">
+            {totalHistoricalRuns}
+          </span>
+        </button>
+
+        {/* HAL DAQ Source Selector */}
         <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5 text-xs font-mono">
           <button
             onClick={() => onToggleDaqSource('SIMULATOR')}
@@ -99,14 +116,14 @@ export const TopBar: React.FC<TopBarProps> = ({
                 ? 'bg-amber-950/80 text-amber-300 font-medium border border-amber-800/40'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
-            title="Physical NI-DAQ IEPE Accelerometers (AI0/AI1) & SAE J1939 CAN Transceiver"
+            title="Physical NI-DAQ IEPE Accelerometers & SAE J1939 CAN Transceiver"
           >
             <HardDrive className="w-3 h-3" />
             <span>NI+CAN</span>
           </button>
         </div>
 
-        {/* Runtime Engine Selector (Browser Twin vs FastAPI WebSocket) */}
+        {/* Runtime Mode Selector */}
         <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5 text-xs font-mono">
           <button
             onClick={() => setConnectionMode('twin')}
@@ -140,28 +157,28 @@ export const TopBar: React.FC<TopBarProps> = ({
           </button>
         </div>
 
-        {/* Gemini Diagnostics Drawer Trigger */}
+        {/* Gemini AI Root-Cause Diagnostic Trigger */}
         <button
           onClick={onOpenDiagnostics}
           className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all whitespace-nowrap flex items-center gap-1.5 ${
             hasDiagnosticAlert
-              ? 'bg-rose-950/60 border-rose-600 text-rose-300 animate-pulse'
-              : 'bg-slate-900 hover:bg-slate-800 border-slate-700/80 text-cyan-300'
+              ? 'bg-rose-950/90 border-rose-600 text-rose-200 animate-pulse'
+              : 'bg-indigo-950/70 hover:bg-indigo-900 border-indigo-700/80 text-indigo-200'
           }`}
-          title="Run Google GenAI Root-Cause Diagnostics"
+          title="Run Google Gemini Multimodal Diagnostic Agent on live telemetry"
         >
-          <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-          <span>Gemini AI</span>
+          <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+          <span className="hidden md:inline">Gemini AI</span>
         </button>
 
         {/* Baseline Model Retrain Action */}
         <button
           onClick={onRetrainBaseline}
           disabled={isRetraining}
-          className="p-1.5 text-slate-400 hover:text-slate-200 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg transition-colors disabled:opacity-50"
-          title="Retrain Isolation Forest Baseline"
+          className="p-1.5 text-slate-300 bg-slate-900 hover:bg-slate-800 border border-slate-700/80 rounded-lg transition-colors disabled:opacity-50"
+          title="Retrain unsupervised baseline Isolation Forest on healthy operating manifold"
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${isRetraining ? 'animate-spin text-cyan-400' : ''}`} />
+          <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isRetraining ? 'animate-spin' : ''}`} />
         </button>
       </div>
     </header>
