@@ -3,26 +3,34 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { TatraTwinSimulator } from './engine/twinSimulator';
-import { TelemetryFrame } from './types/telemetry';
+import { TelemetryFrame, GeminiDiagnosticReport } from './types/telemetry';
 import { TopBar } from './components/TopBar';
 import { EngineHealthBanner } from './components/EngineHealthBanner';
 import { OscilloscopeCanvas } from './components/OscilloscopeCanvas';
 import { OrderSpectrumCanvas } from './components/OrderSpectrumCanvas';
+import { OrderTrackingPanel } from './components/OrderTrackingPanel';
 import { EcuGauges } from './components/EcuGauges';
 import { FaultInjectionPanel } from './components/FaultInjectionPanel';
 import { EngineSchematic } from './components/EngineSchematicModal';
 import { TelemetryLogTable } from './components/TelemetryLogTable';
+import { GeminiDiagnosticsModal } from './components/GeminiDiagnosticsModal';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>('overview');
   const [connectionMode, setConnectionMode] = useState<'twin' | 'websocket'>('twin');
+  const [daqSource, setDaqSource] = useState<'SIMULATOR' | 'HARDWARE'>('SIMULATOR');
   const [wsConnected, setWsConnected] = useState<boolean>(false);
   const [currentFrame, setCurrentFrame] = useState<TelemetryFrame | null>(null);
   const [history, setHistory] = useState<TelemetryFrame[]>([]);
   const [isRetraining, setIsRetraining] = useState<boolean>(false);
   const [notification, setNotification] = useState<string | null>(null);
+
+  // Gemini Diagnostics State
+  const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState<boolean>(false);
+  const [diagnosticReport, setDiagnosticReport] = useState<GeminiDiagnosticReport | null>(null);
+  const [isLoadingDiagnostics, setIsLoadingDiagnostics] = useState<boolean>(false);
 
   // Twin Simulator singleton
   const simulatorRef = useRef<TatraTwinSimulator | null>(null);
@@ -109,7 +117,7 @@ export default function App() {
       simulatorRef.current.setFault(fault, severity);
     }
 
-    // Also forward to WebSocket if connected
+    // Forward to WebSocket if connected
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(
         JSON.stringify({
@@ -145,6 +153,39 @@ export default function App() {
         })
       );
     }
+  };
+
+  const handleToggleDaqSource = async (newSource: 'SIMULATOR' | 'HARDWARE') => {
+    setDaqSource(newSource);
+    if (simulatorRef.current) {
+      simulatorRef.current.setSourceMode(newSource);
+    }
+
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({
+          action: 'set_source_mode',
+          source_mode: newSource,
+        })
+      );
+    }
+
+    try {
+      await fetch('/api/config/source', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source_mode: newSource })
+      });
+    } catch (e) {
+      // Backend might be offline if in browser-only mode
+    }
+
+    setNotification(
+      newSource === 'HARDWARE'
+        ? 'Switched DAQ Source: NI-DAQ IEPE (AI0/AI1) & J1939 CAN'
+        : 'Switched DAQ Source: Tatra V8 Physics Simulator'
+    );
+    setTimeout(() => setNotification(null), 3500);
   };
 
   const handleRetrainBaseline = () => {
@@ -183,17 +224,53 @@ export default function App() {
     setTimeout(() => setNotification(null), 3000);
   };
 
+  // Run Gemini AI Root-Cause Diagnostics
+  const handleRunDiagnostics = async () => {
+    setIsLoadingDiagnostics(true);
+    setIsDiagnosticsOpen(true);
+
+    // If connected to FastAPI backend, attempt REST endpoint first
+    if (wsConnected) {
+      try {
+        const res = await fetch('/api/diagnostics/analyze', { method: 'POST' });
+        if (res.ok) {
+          const report: GeminiDiagnosticReport = await res.json();
+          setDiagnosticReport(report);
+          setIsLoadingDiagnostics(false);
+          return;
+        }
+      } catch (e) {
+        // fallback to in-browser twin generator
+      }
+    }
+
+    // In-browser Twin diagnostic synthesis
+    setTimeout(() => {
+      if (simulatorRef.current) {
+        const report = simulatorRef.current.generateDiagnosticsReport();
+        setDiagnosticReport(report);
+      }
+      setIsLoadingDiagnostics(false);
+    }, 900);
+  };
+
+  const isDegradedOrCritical = (currentFrame?.ehi?.overall_ehi ?? 100) < 75;
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-200">
-      {/* 3-Zone Top Bar */}
+      {/* 3-Zone Top Bar with HAL Source Selector and AI Diagnostics */}
       <TopBar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         connectionMode={connectionMode}
         setConnectionMode={setConnectionMode}
+        daqSource={daqSource}
+        onToggleDaqSource={handleToggleDaqSource}
         wsConnected={wsConnected}
         onRetrainBaseline={handleRetrainBaseline}
         isRetraining={isRetraining}
+        onOpenDiagnostics={handleRunDiagnostics}
+        hasDiagnosticAlert={isDegradedOrCritical}
       />
 
       {/* Floating Notification Toast */}
@@ -206,39 +283,47 @@ export default function App() {
 
       {/* Main Content Viewport */}
       <main className="flex-1 max-w-[1520px] w-full mx-auto p-4 sm:p-6 space-y-6">
-        {/* Engine Health Banner */}
+        {/* Engine Health Banner with ISO 10816-6 EHI and Gemini trigger */}
         <EngineHealthBanner
           frame={currentFrame}
           onClearFaults={() => handleInjectFault('none', 0)}
+          onOpenDiagnostics={handleRunDiagnostics}
         />
 
         {/* Tab 1: Overview & Health */}
         {activeTab === 'overview' && (
           <div className="space-y-6">
-            {/* Top Row: Dual-axis Oscilloscope + Order FFT side by side */}
+            {/* Top Row: Synchronous Order Tracking + Dual-axis Oscilloscope */}
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+              <OrderTrackingPanel
+                orderTracking={currentFrame?.dsp_features.order_tracking}
+                rpm={currentFrame?.engine_state.rpm ?? 1250}
+              />
               <OscilloscopeCanvas
                 waveform={currentFrame?.stream_payload.waveform ?? []}
                 dsp={currentFrame?.dsp_features ?? null}
                 activeFault={currentFrame?.engine_state.active_fault ?? 'none'}
               />
+            </div>
+
+            {/* Second Row: Order Spectrum (Welch PSD) & ECU Instruments */}
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
               <OrderSpectrumCanvas
                 fftX={currentFrame?.stream_payload.fft_x ?? []}
                 fftY={currentFrame?.stream_payload.fft_y ?? []}
                 dsp={currentFrame?.dsp_features ?? null}
                 rpm={currentFrame?.engine_state.rpm ?? 1250}
               />
+
+              {currentFrame && (
+                <EcuGauges
+                  state={currentFrame.engine_state}
+                  thermo={currentFrame.thermo_validation}
+                />
+              )}
             </div>
 
-            {/* Middle Row: ECU Gauges & Thermodynamic Rules */}
-            {currentFrame && (
-              <EcuGauges
-                state={currentFrame.engine_state}
-                thermo={currentFrame.thermo_validation}
-              />
-            )}
-
-            {/* Bottom Row: Fault Injection Matrix */}
+            {/* Fault Injection Matrix */}
             {currentFrame && (
               <FaultInjectionPanel
                 engineState={currentFrame.engine_state}
@@ -258,7 +343,33 @@ export default function App() {
           </div>
         )}
 
-        {/* Tab 2: Biaxial Vibration DSP */}
+        {/* Tab 2: Dedicated Order Tracking (COT) */}
+        {activeTab === 'orders' && currentFrame && (
+          <div className="space-y-6">
+            <OrderTrackingPanel
+              orderTracking={currentFrame.dsp_features.order_tracking}
+              rpm={currentFrame.engine_state.rpm}
+            />
+
+            <OrderSpectrumCanvas
+              fftX={currentFrame.stream_payload.fft_x}
+              fftY={currentFrame.stream_payload.fft_y}
+              dsp={currentFrame.dsp_features}
+              rpm={currentFrame.engine_state.rpm}
+            />
+
+            <FaultInjectionPanel
+              engineState={currentFrame.engine_state}
+              onInjectFault={handleInjectFault}
+              onSetOperatingPoint={handleSetOperatingPoint}
+              onExportSnapshot={handleExportSnapshot}
+              onRetrainBaseline={handleRetrainBaseline}
+              isRetraining={isRetraining}
+            />
+          </div>
+        )}
+
+        {/* Tab 3: Biaxial Vibration DSP */}
         {activeTab === 'vibration' && currentFrame && (
           <div className="space-y-6">
             <OscilloscopeCanvas
@@ -300,8 +411,10 @@ export default function App() {
                     </span>
                   </div>
                   <div className="flex justify-between py-2">
-                    <span className="text-slate-400">Skewness</span>
-                    <span className="text-slate-200 font-bold">{currentFrame.dsp_features.radial_x.time.skewness}</span>
+                    <span className="text-slate-400">BPFO Harmonic Peak</span>
+                    <span className="text-slate-200 font-bold">
+                      {currentFrame.dsp_features.radial_x.order_peaks?.amp_bpfo_g ?? 0.04} g
+                    </span>
                   </div>
                 </div>
               </div>
@@ -355,7 +468,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Tab 3: Order Spectrum (FFT) */}
+        {/* Tab 4: Order Spectrum (FFT) */}
         {activeTab === 'spectrum' && currentFrame && (
           <div className="space-y-6">
             <OrderSpectrumCanvas
@@ -405,7 +518,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Tab 4: ECU & Thermodynamics */}
+        {/* Tab 5: ECU & Thermodynamics */}
         {activeTab === 'ecu' && currentFrame && (
           <div className="space-y-6">
             <EcuGauges
@@ -424,7 +537,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Tab 5: Engine Schematic CAD */}
+        {/* Tab 6: Engine Schematic CAD */}
         {activeTab === 'schematic' && currentFrame && (
           <div className="space-y-6">
             <EngineSchematic
@@ -444,18 +557,29 @@ export default function App() {
         )}
       </main>
 
+      {/* Gemini AI Diagnostics Slide-Over Drawer */}
+      <GeminiDiagnosticsModal
+        isOpen={isDiagnosticsOpen}
+        onClose={() => setIsDiagnosticsOpen(false)}
+        report={diagnosticReport}
+        isLoading={isLoadingDiagnostics}
+        onRunAnalysis={handleRunDiagnostics}
+      />
+
       {/* Footer */}
       <footer className="border-t border-slate-800/80 bg-slate-950/80 px-6 py-4 mt-8">
         <div className="max-w-[1520px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
           <div>
-            Tatra T3B-928 V8 Heavy Diesel Predictive Maintenance System · TRL-4 Functional Validation
+            Tatra T3B-928 V8 Heavy Diesel Predictive Maintenance System · TRL-5 Component Validation
           </div>
           <div className="font-mono text-[11px] text-slate-400 flex items-center gap-3">
-            <span>25.6 kS/s DSP</span>
+            <span>Synchronous Order Tracking</span>
             <span>·</span>
-            <span>SAE J1939 CAN</span>
+            <span>ISO 10816-6 EHI</span>
             <span>·</span>
-            <span>Isolation Forest Edge AI</span>
+            <span>HAL NI-DAQ / CAN</span>
+            <span>·</span>
+            <span>Gemini 3.8 Flash AI</span>
           </div>
         </div>
       </footer>

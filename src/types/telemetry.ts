@@ -1,5 +1,5 @@
 /**
- * Telemetry data types for Tatra T3B-928 V8 Predictive Maintenance Testbed
+ * Telemetry data types for Tatra T3B-928 V8 Predictive Maintenance Testbed (TRL-5)
  */
 
 export interface EngineState {
@@ -40,9 +40,29 @@ export interface SpectralMetrics {
   energy_hf_bearing: number;
 }
 
+export interface OrderPeakMetrics {
+  amp_1x_g: number;
+  amp_2x_g: number;
+  amp_4x_g: number;
+  amp_bpfo_g: number;
+}
+
+export interface OrderBin {
+  order: number;
+  amp: number;
+}
+
+export interface OrderTrackingMetrics {
+  total_revolutions: number;
+  radial_x_peaks: OrderPeakMetrics;
+  radial_y_peaks: OrderPeakMetrics;
+  order_bins: OrderBin[];
+}
+
 export interface AxisDspFeatures {
   time: TimeDomainMetrics;
   spectral: SpectralMetrics;
+  order_peaks?: OrderPeakMetrics;
 }
 
 export interface CrossAxisFeatures {
@@ -54,6 +74,7 @@ export interface DspFeatures {
   radial_x: AxisDspFeatures;
   radial_y: AxisDspFeatures;
   cross_axis: CrossAxisFeatures;
+  order_tracking?: OrderTrackingMetrics;
 }
 
 export interface ThermoValidation {
@@ -67,6 +88,27 @@ export interface ThermoValidation {
   oil_temp_nominal: boolean;
   thermo_health_score: number;
   violations: string[];
+}
+
+export interface HealthSubScores {
+  vibration: number;
+  thermal: number;
+  lubrication: number;
+  combustion: number;
+}
+
+export interface EngineHealthIndex {
+  overall_ehi: number;
+  status: 'HEALTHY' | 'DEGRADED' | 'CRITICAL';
+  iso_10816_zone: string;
+  sub_scores: HealthSubScores;
+  primary_stressor: string;
+  weights: {
+    vibration: number;
+    thermal: number;
+    lubrication: number;
+    combustion: number;
+  };
 }
 
 export interface TopContributor {
@@ -101,13 +143,27 @@ export interface StreamPayload {
   waveform: WaveformPoint[];
   fft_x: FftPoint[];
   fft_y: FftPoint[];
+  order_bins?: OrderBin[];
+}
+
+export interface GeminiDiagnosticReport {
+  root_cause_hypothesis: string;
+  criticality: 'LOW' | 'MEDIUM' | 'HIGH' | 'IMMEDIATE_SHUTDOWN';
+  component_affected: string;
+  recommended_actions: string[];
+  engine_model: string;
+  source: string;
+  model_version: string;
+  generated_at?: number;
 }
 
 export interface TelemetryFrame {
   timestamp: number;
+  source?: string;
   engine_state: EngineState;
   dsp_features: DspFeatures;
   thermo_validation: ThermoValidation;
+  ehi?: EngineHealthIndex;
   anomaly: AnomalyResult;
   stream_payload: StreamPayload;
 }

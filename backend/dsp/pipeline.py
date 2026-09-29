@@ -9,6 +9,7 @@ import numpy as np
 from scipy import signal
 from scipy.stats import kurtosis, skew
 from typing import Dict, Any, List, Tuple
+from .order_tracking import SynchronousOrderTracker
 
 
 class EngineDSPPipeline:
@@ -21,6 +22,8 @@ class EngineDSPPipeline:
         self.sample_rate = sample_rate
         self.n_fft_bins = n_fft_bins
         self.n_waveform_points = n_waveform_points
+        self.order_tracker = SynchronousOrderTracker(sample_rate=sample_rate)
+        self.last_rpm: float = 1250.0
 
     @staticmethod
     def compute_time_domain_metrics(sig: np.ndarray) -> Dict[str, float]:
@@ -219,10 +222,15 @@ class EngineDSPPipeline:
         spec_metrics_x, fft_bins_x = self.compute_spectral_features(rad_x, rpm)
         spec_metrics_y, fft_bins_y = self.compute_spectral_features(rad_y, rpm)
         
-        # 3. Thermodynamic Validation
+        # 3. Synchronous Order Tracking (COT)
+        sot_x = self.order_tracker.compute_order_spectrum(rad_x, rpm, self.last_rpm)
+        sot_y = self.order_tracker.compute_order_spectrum(rad_y, rpm, self.last_rpm)
+        self.last_rpm = rpm
+
+        # 4. Thermodynamic Validation
         thermo_validation = self.validate_thermodynamics(engine_state)
         
-        # 4. Downsample raw waveform for oscilloscope display
+        # 5. Downsample raw waveform for oscilloscope display
         step = max(1, len(rad_x) // self.n_waveform_points)
         downsampled_waveform = []
         for i in range(0, min(len(rad_x), len(rad_y)), step):
@@ -240,21 +248,30 @@ class EngineDSPPipeline:
             "dsp_features": {
                 "radial_x": {
                     "time": time_metrics_x,
-                    "spectral": spec_metrics_x
+                    "spectral": spec_metrics_x,
+                    "order_peaks": sot_x["order_peaks"]
                 },
                 "radial_y": {
                     "time": time_metrics_y,
-                    "spectral": spec_metrics_y
+                    "spectral": spec_metrics_y,
+                    "order_peaks": sot_y["order_peaks"]
                 },
                 "cross_axis": {
                     "rms_ratio_xy": round(float(time_metrics_x["rms"] / (time_metrics_y["rms"] + 1e-5)), 2),
                     "max_kurtosis": max(time_metrics_x["kurtosis"], time_metrics_y["kurtosis"])
+                },
+                "order_tracking": {
+                    "total_revolutions": sot_x["total_revolutions"],
+                    "radial_x_peaks": sot_x["order_peaks"],
+                    "radial_y_peaks": sot_y["order_peaks"],
+                    "order_bins": sot_x["order_bins"]
                 }
             },
             "thermo_validation": thermo_validation,
             "stream_payload": {
                 "waveform": downsampled_waveform,
                 "fft_x": fft_bins_x,
-                "fft_y": fft_bins_y
+                "fft_y": fft_bins_y,
+                "order_bins": sot_x["order_bins"]
             }
         }

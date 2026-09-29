@@ -1,65 +1,77 @@
-# Tatra T3B-928 V8 Predictive Maintenance Testbed (TRL-4)
+# Tatra T3B-928 V8 Predictive Maintenance Testbed (TRL-5)
 
-Industrial IoT, Signal Processing, and Edge AI predictive maintenance application for the heavy-duty **Tatra 8x8 truck engine** (Tatra T3B-928 V8 air-cooled diesel).
+Industrial IoT, Signal Processing, and Edge AI predictive maintenance application for the heavy-duty **Tatra 8x8 truck engine** (Tatra T3B-928 V8 air-cooled diesel), upgraded to **TRL-5 (Component Validation in Relevant/Testbed Environment)**.
 
 ---
 
-## 1. Engine & Testbed Architecture
+## 1. TRL-5 Architecture & Subsystems
 
 | Subsystem | Engineering Specification |
 | :--- | :--- |
-| **Engine Model** | Tatra T3B-928-70 / T3B-928-80 (Euro 3/Euro 4) |
-| **Configuration** | 90° V8, Air-Cooled, Direct Injection, Twin Turbocharged with Intercoolers |
-| **Displacement** | 12,667 cm³ (Bore: 120 mm, Stroke: 140 mm) |
-| **Power & Torque** | 300–325 kW (408–442 hp) @ 1,800 RPM; 1,450–1,550 N·m @ 1,200–1,400 RPM |
-| **Crankcase** | **Tunnel Crankcase**: solid cast bulkhead with monolithic cylindrical roller bearings supporting the assembled crankshaft |
-| **Cylinder Heads** | Individual ribbed light-alloy cylinder heads per cylinder with separate cooling shrouds |
-| **Cooling** | Front-mounted engine-driven hydraulic cooling blower fan with proportional PWM bypass valve |
-| **Biaxial Vibration** | Synchronous 25.6 kS/s piezoelectric accelerometers: Radial-X (horizontal) and Radial-Y (vertical) |
-| **ECU Protocol** | SAE J1939 CAN bus telemetry (RPM: SPN 190, EOP: SPN 100, EOT: SPN 175, Torque: SPN 92, Boost: SPN 102) |
+| **Engine Architecture** | Tatra T3B-928 90° V8, Air-Cooled, Direct Injection, Twin Turbocharged with Intercoolers |
+| **Displacement & Output** | 12,667 cm³; 325 kW (442 hp) @ 1,800 RPM; 1,550 N·m @ 1,300 RPM |
+| **Crankcase & Bearings** | Monolithic **Tunnel Crankcase** with cylindrical roller main bearings |
+| **Cylinder Heads** | Individual finned alloy cylinder heads (Bank 1: LH cyl 1–4; Bank 2: RH cyl 5–8) |
+| **Cooling** | Front engine-driven hydraulic cooling fan with proportional PWM bypass valve |
+| **Hardware Abstraction Layer (HAL)** | Runtime switchable: Physical **NI-DAQ IEPE Accelerometers** (25.6/51.2 kS/s) + **SAE J1939 CAN transceiver** (SocketCAN/PCAN) vs. Physics Engine Simulator |
+| **Synchronous Order Tracking (DSP)** | Computed Order Tracking (COT) via angular-domain resampling $\theta(t) = \int 2\pi f_0 dt$ extracting 1X, 2X, 4X V8 firing, and BPFO orders |
+| **Engine Health Index (EHI)** | Multi-factor continuous scoring (0.0 to 100.0) compliant with **ISO 10816-6** (Reciprocating Machinery) |
+| **AI Root-Cause Diagnostics** | **Gemini 3.8 Flash** via official Google GenAI SDK (`google-genai`) generating structured root-cause hypotheses and prescriptive technician checklists |
 
 ---
 
-## 2. Signal Processing & Anomaly Detection Pipeline
+## 2. Hardware Abstraction Layer (HAL)
 
-### A. Digital Signal Processing (DSP)
-- **Sampling Frequency**: $F_s = 25,600\text{ Hz}$ ($25.6\text{ kS/s}$)
-- **Time-Domain Feature Extraction**:
-  - Root Mean Square (RMS)
-  - Peak and Peak-to-Peak ($V_{p-p}$)
-  - Crest Factor ($C_f = \frac{V_{peak}}{V_{rms}}$)
-  - Pearson Kurtosis ($\kappa = \frac{\mathbb{E}[(x-\mu)^4]}{\sigma^4}$, sensitive to impulsive bearing shock pulses)
-  - Skewness
-- **Frequency-Domain Order Tracking**:
-  - Fundamental rotating shaft frequency: $f_0 = \frac{\text{RPM}}{60}$
-  - Cylinder firing order frequency (4 firings/rev for 4-stroke V8): $f_{\text{firing}} = 4 \times f_0$
-  - Ball Pass Frequency Outer Race (BPFO) for tunnel roller bearings: $\approx 3.58 \times f_0$
-  - High-frequency demodulation band: $2,000\text{ Hz} - 8,000\text{ Hz}$
+The testbed features a dual-mode HAL architecture with dynamic runtime switching via `POST /api/config/source`:
 
-### B. Thermodynamic Physical Laws Validation
-1. **Oil Pressure vs RPM Dynamic Envelope**: Verifies hydrodynamic lubrication pressure against minimum speed threshold ($P_{\text{oil}} \ge 1.4 + 2.5 \times \frac{\text{RPM}}{2100}\text{ bar}$).
-2. **CHT Bank Thermal Differential**: Verifies Left Bank (CHT1) vs Right Bank (CHT2) delta ($\Delta T \le 18^\circ\text{C}$ normal; $>30^\circ\text{C}$ critical cooling shutter failure).
-3. **Brake Power Conservation**: Checks $P_{\text{kW}} = \frac{\tau \times \text{RPM}}{9549}$.
-4. **Turbo Boost Pressure Sanity**: Checks charge-air boost pressure under varying engine loads.
+### A. NI-DAQ IEPE Accelerometer Driver (`backend/hal/ni_daq.py`)
+- Channels: `ai0` (Radial-X on front crankcase bulkhead) and `ai1` (Radial-Y on main bearing saddle crown).
+- Excitation: 4 mA constant current excitation (24V compliance), AC coupling, and hardware anti-aliasing.
+- Automatic Fallback: If NI-DAQmx drivers or C-Series hardware are absent on the host OS, it logs an informative notice and yields synchronous simulated frames with zero crash risk.
 
-### C. Unsupervised Edge AI Anomaly Detection
-- **Algorithm**: Multi-dimensional Isolation Forest trained on healthy engine manifold points across the full operational envelope ($700 - 2,100\text{ RPM}$, $0 - 100\%\text{ load}$).
-- **Continuous Anomaly Score**: Scaled to $[0.000, 1.000]$ ($0.0 = \text{nominal}$, $\ge 0.52 = \text{alarm}$).
-- **Explainable Feature Attribution**: Computes $z$-score deviations against healthy baseline distributions to rank root-cause contributors (e.g. *Radial-X Impulsive Kurtosis (+4.2σ)*).
+### B. SAE J1939 CAN Transceiver (`backend/hal/can_bus.py`)
+- Protocol: J1939 250 kbps / 500 kbps over SocketCAN (`can0`, `vcan0`), PEAK-System PCAN-USB, or Kvaser.
+- Decoded PGNs:
+  - **PGN 61444 (EEC1)**: SPN 190 (Engine Speed RPM), SPN 92 (Engine Percent Load)
+  - **PGN 65263 (EFL_P1)**: SPN 100 (Engine Oil Pressure EOP)
+  - **PGN 65262 (ET1)**: SPN 175 (Engine Oil Temperature EOT)
+  - **PGN 65270 (IC1)**: SPN 102 (Intake Manifold Boost Pressure)
 
 ---
 
-## 3. Dynamic Fault Injection Modes
+## 3. Synchronous Order Tracking (DSP) & ISO 10816-6 EHI
 
-| Fault Mode | Mechanical Root Cause | Observable Physical Symptoms |
-| :--- | :--- | :--- |
-| **Bearing Flaw** | Roller bearing outer race spall on tunnel bulkhead | Sharp Kurtosis surge ($>6.0$), high Crest Factor, transient shock pulses at BPFO frequency in $3.2\text{ kHz}$ resonant band. |
-| **Cooling Imbalance** | Hydraulic blower duct debris blockage or sticking bank vane | Right Bank CHT2 diverges from Left Bank CHT1 ($\Delta T > 30^\circ\text{C}$), fan hydraulic valve hits 100% saturation. |
-| **Lubrication Degradation** | Oil pump relief bypass stuck or viscosity breakdown | Oil pressure plummets below $1.8\text{ bar}$ under load, oil temperature surges past $120^\circ\text{C}$, increased scuffing noise. |
+### A. Angular-Domain Computed Order Tracking (`backend/dsp/order_tracking.py`)
+Standard FFT suffers from spectral smearing during throttle transitions. Synchronous Order Tracking solves this by resampling $x(t) \to x(\theta)$ where $\theta(t) = \int 2\pi f_0(t) dt$:
+- **1X Order**: Crankshaft fundamental rotating unbalance ($f_0 = \frac{\text{RPM}}{60}$).
+- **2X Order**: Second-order angular asymmetry / shaft misalignment ($2 \times f_0$).
+- **4X Order**: Tatra V8 four-stroke cylinder firing frequency (4 firings per crankshaft revolution = $4 \times f_0$).
+- **BPFO Order**: Ball Pass Frequency Outer Race on tunnel roller main bearing ($\approx 3.58 \times f_0$).
+
+### B. Continuous ISO 10816-6 Engine Health Index (`backend/models/health_index.py`)
+Computes an objective, continuous 0.0 to 100.0 health metric based on four weighted pillars:
+$$\text{EHI} = 0.35 \cdot S_{\text{vib}} + 0.25 \cdot S_{\text{therm}} + 0.20 \cdot S_{\text{lube}} + 0.20 \cdot S_{\text{comb}}$$
+- **Vibration Score ($S_{\text{vib}}$)**: ISO 10816-6 Zone classification (Zone A/B/C/D), Kurtosis impulsiveness penalty ($\kappa > 3.5$), and BPFO bearing defect order surge.
+- **Thermal Balance Score ($S_{\text{therm}}$)**: Left Bank CHT1 vs Right Bank CHT2 differential penalty ($\Delta T > 12^\circ\text{C}$) and oil sump thermal limits ($> 105^\circ\text{C}$).
+- **Lubrication Health Score ($S_{\text{lube}}$)**: Hydrodynamic oil pressure dynamic envelope deficit ($P_{\text{oil}} \ge 1.4 + 2.5 \cdot \frac{\text{RPM}}{2100}\text{ bar}$).
+- **Combustion Efficiency Score ($S_{\text{comb}}$)**: Turbocharger boost pressure correlation under dynamometer load.
 
 ---
 
-## 4. Quickstart Guide (Local Execution)
+## 4. Gemini AI Diagnostics Integration (`backend/ai/gemini_diagnostics.py`)
+
+Powered by the Google GenAI SDK (`google-genai`):
+- Model: `gemini-3.8-flash` with structured JSON schema.
+- Input: Multimodal snapshot containing EHI sub-scores, J1939 ECU metrics, synchronous order peaks, and active fault states.
+- Output:
+  - `root_cause_hypothesis`: Engineering diagnosis of physical degradation.
+  - `criticality`: `LOW` | `MEDIUM` | `HIGH` | `IMMEDIATE_SHUTDOWN`.
+  - `component_affected`: Specific assembly (e.g. *Front Tunnel Roller Bearing #1 Bulkhead*).
+  - `recommended_actions`: Prescriptive step-by-step mechanical technician inspection checklist.
+
+---
+
+## 5. Quickstart & Local Execution
 
 ### Option A: Standard Local Virtualenv + Node
 
@@ -79,7 +91,7 @@ pip install -r requirements.txt
 cd backend
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
-*Backend API docs available at: `http://localhost:8000/docs`*
+*Backend Swagger API docs available at: `http://localhost:8000/docs`*
 
 #### 2. Start the React 18 + Vite Frontend Dashboard:
 ```bash
@@ -102,11 +114,14 @@ docker-compose up --build
 
 ---
 
-## 5. API Reference
+## 6. REST API Reference (TRL-5)
 
-- `GET /api/health` — System status, calibration state, active fault.
+- `GET /api/health` — Full subsystem health, TRL-5 status, active fault, and driver statuses.
+- `GET /api/config/source` — Inquire current DAQ hardware status (NI-DAQ IEPE & CAN).
+- `POST /api/config/source` — Toggle DAQ acquisition source: `{"source_mode": "SIMULATOR" | "HARDWARE"}`.
+- `POST /api/diagnostics/analyze` — Trigger Google GenAI root-cause diagnostic synthesis.
 - `POST /api/simulate/fault` — Inject fault: `{"fault_type": "bearing_flaw" | "cooling_imbalance" | "lubrication_degradation" | "none", "severity": 0.0 - 1.0}`.
 - `POST /api/simulate/operating_point` — Set RPM and Load: `{"rpm": 1400, "load_pct": 65}`.
 - `POST /api/baseline/train` — Retrain baseline Isolation Forest on synthetic operating envelope.
 - `GET /api/telemetry/snapshot` — Instantaneous multimodal frame snapshot.
-- `WS /ws/telemetry` — 10 Hz synchronized WebSocket streaming raw waveforms, FFT, DSP metrics, ECU status, and anomaly scores.
+- `WS /ws/telemetry` — 10 Hz synchronized WebSocket streaming raw waveforms, FFT, Synchronous Order Tracking peaks, ISO 10816-6 EHI, and anomaly metrics.

@@ -1,13 +1,17 @@
 """
-Tatra T3B-928 V8 Predictive Maintenance Testbed - FastAPI Application
-Provides REST endpoints for fault injection & baseline calibration,
-and a high-speed WebSocket (/ws/telemetry) streaming 10 Hz synchronized frames.
+Tatra T3B-928 V8 Predictive Maintenance Testbed - FastAPI Application (TRL-5)
+Integrates:
+- Hardware Abstraction Layer (HAL): NI-DAQ IEPE & SAE J1939 CAN transceiver
+- Synchronous Order Tracking (SOT): 1X, 2X, 4X V8 cylinder firing order peaks
+- ISO 10816-6 Engine Health Index (EHI) Calculator
+- Gemini AI Root-Cause Diagnostic Agent
+- 10 Hz WebSocket streaming (/ws/telemetry)
 """
 
 import asyncio
 import json
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Literal
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
@@ -17,15 +21,26 @@ from pydantic import BaseModel, Field
 from simulator.engine_sim import TatraEngineSimulator
 from dsp.pipeline import EngineDSPPipeline
 from models.anomaly_detector import EngineAnomalyDetector
+from models.health_index import EngineHealthIndexCalculator
+from hal.manager import HALManager
+from ai.gemini_diagnostics import EngineDiagnosticsAgent
 
-# Configure structured logging
+# Structured logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("TatraTestbed")
 
-# Global system components
+# Core system components
 simulator = TatraEngineSimulator(sample_rate=25600, buffer_duration=0.1)
 dsp_pipeline = EngineDSPPipeline(sample_rate=25600, n_fft_bins=256, n_waveform_points=256)
 anomaly_detector = EngineAnomalyDetector()
+health_index_calc = EngineHealthIndexCalculator(
+    weight_vibration=0.35,
+    weight_thermal=0.25,
+    weight_lubrication=0.20,
+    weight_combustion=0.20
+)
+hal_manager = HALManager(simulator=simulator)
+diagnostics_agent = EngineDiagnosticsAgent()
 
 # WebSocket Connection Manager
 class ConnectionManager:
@@ -58,34 +73,40 @@ background_stream_task: Optional[asyncio.Task] = None
 async def telemetry_streaming_worker():
     """
     Background worker running at 10 Hz (every 100 ms).
-    Advances engine simulation, executes DSP pipeline, scores with anomaly detector,
-    and broadcasts to connected WebSocket clients.
+    Acquires raw frames from HAL (Simulator or Real NI-DAQ + J1939 CAN),
+    runs DSP pipeline + Synchronous Order Tracking, computes ISO 10816-6 EHI,
+    runs Isolation Forest anomaly prediction, and broadcasts over WebSocket.
     """
     global latest_processed_frame
-    logger.info("Starting 10 Hz multimodal telemetry streaming worker...")
+    logger.info("Starting 10 Hz TRL-5 multimodal telemetry streaming worker...")
     while True:
         try:
-            # 1. Step simulation (generates 2560 vibration samples and ECU thermodynamic values)
-            raw_frame = simulator.step()
+            # 1. Acquire multimodal frame via HAL Manager
+            raw_frame = await hal_manager.acquire_multimodal_frame()
             
-            # 2. Execute DSP and Thermodynamic Validation
+            # 2. Execute DSP Pipeline (Time-domain, Welch PSD, and Synchronous Order Tracking)
             processed = dsp_pipeline.process_frame(raw_frame)
             
-            # 3. Score with Unsupervised Baseline Anomaly Detector
+            # 3. Calculate ISO 10816-6 Compliant Engine Health Index (EHI)
+            ehi_result = health_index_calc.calculate(processed)
+            
+            # 4. Score with Unsupervised Baseline Anomaly Detector
             anomaly_result = anomaly_detector.predict_frame(processed)
             
-            # 4. Construct unified telemetry package
+            # 5. Construct unified telemetry package
             telemetry_payload = {
                 "timestamp": processed["timestamp"],
+                "source": raw_frame.get("source", "SIMULATOR"),
                 "engine_state": processed["engine_state"],
                 "dsp_features": processed["dsp_features"],
                 "thermo_validation": processed["thermo_validation"],
+                "ehi": ehi_result,
                 "anomaly": anomaly_result,
                 "stream_payload": processed["stream_payload"]
             }
             latest_processed_frame = telemetry_payload
             
-            # 5. Broadcast to connected WebSocket clients if any
+            # 6. Broadcast to connected WebSocket clients
             if manager.active_connections:
                 await manager.broadcast_json(telemetry_payload)
                 
@@ -101,8 +122,10 @@ async def telemetry_streaming_worker():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global background_stream_task
+    logger.info("Initializing TRL-5 Testbed subsystems...")
+    # Initialize HAL drivers
+    await hal_manager.initialize()
     # Pre-train baseline on startup
-    logger.info("Training initial baseline anomaly detector on synthetic nominal engine manifold...")
     anomaly_detector.train_baseline_synthetic(n_samples=500)
     # Start background telemetry generator
     background_stream_task = asyncio.create_task(telemetry_streaming_worker())
@@ -114,16 +137,17 @@ async def lifespan(app: FastAPI):
             await background_stream_task
         except asyncio.CancelledError:
             pass
+    await hal_manager.shutdown()
 
 
 app = FastAPI(
-    title="Tatra T3B-928 V8 Predictive Maintenance Testbed API",
-    description="Synchronous Biaxial Vibration DSP, SAE J1939 ECU Telemetry & Edge AI Anomaly Detection",
-    version="1.0.0",
+    title="Tatra T3B-928 V8 Predictive Maintenance Testbed API (TRL-5)",
+    description="Synchronous Order Tracking, ISO 10816-6 EHI, HAL (NI-DAQ/CAN), and Gemini AI Diagnostics",
+    version="2.0.0",
     lifespan=lifespan
 )
 
-# Enable CORS for local Vite development & cross-origin dashboards
+# Enable CORS for local Vite development
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -134,41 +158,69 @@ app.add_middleware(
 
 
 # Request Models
+class SourceModeRequest(BaseModel):
+    source_mode: Literal["SIMULATOR", "HARDWARE"] = Field(..., description="'SIMULATOR' or 'HARDWARE'")
+
+
 class FaultInjectionRequest(BaseModel):
     fault_type: str = Field(..., description="'none', 'bearing_flaw', 'cooling_imbalance', 'lubrication_degradation'")
-    severity: float = Field(default=1.0, ge=0.0, le=1.0, description="Severity from 0.0 (off) to 1.0 (extreme)")
+    severity: float = Field(default=1.0, ge=0.0, le=1.0, description="Severity from 0.0 to 1.0")
 
 
 class OperatingPointRequest(BaseModel):
     rpm: Optional[float] = Field(None, ge=650.0, le=2200.0, description="Engine RPM (650 - 2200)")
-    load_pct: Optional[float] = Field(None, ge=0.0, le=100.0, description="Engine Load Percentage (0 - 100%)")
+    load_pct: Optional[float] = Field(None, ge=0.0, le=100.0, description="Engine Load % (0 - 100%)")
 
 
 class TrainBaselineRequest(BaseModel):
-    n_samples: int = Field(default=600, ge=100, le=5000, description="Number of baseline training samples across RPM/Load manifold")
+    n_samples: int = Field(default=600, ge=100, le=5000, description="Number of baseline training samples")
 
+
+# --- REST ENDPOINTS ---
 
 @app.get("/api/health")
 def get_health() -> Dict[str, Any]:
     """
-    Returns system status, active fault mode, and baseline model status.
+    Returns system status, active fault mode, HAL source, and baseline calibration state.
     """
     return {
         "status": "operational",
+        "trl_level": "TRL-5 (Component Validation in Relevant/Testbed Environment)",
         "engine_model": "Tatra T3B-928 V8 Air-Cooled Diesel",
         "crankcase_type": "Tunnel crankcase with cylindrical roller main bearings",
-        "vibration_sampling_rate_hz": simulator.sample_rate,
+        "hal_status": hal_manager.get_source_status(),
         "active_fault": simulator.active_fault,
         "fault_severity": simulator.fault_severity,
         "is_baseline_trained": anomaly_detector.is_trained,
+        "gemini_agent_active": diagnostics_agent.client is not None,
         "active_websocket_clients": len(manager.active_connections)
     }
+
+
+@app.get("/api/config/source")
+def get_source_configuration() -> Dict[str, Any]:
+    """
+    Returns current DAQ ingestion source configuration and driver handles.
+    """
+    return hal_manager.get_source_status()
+
+
+@app.post("/api/config/source")
+async def set_source_configuration(req: SourceModeRequest) -> Dict[str, Any]:
+    """
+    Switches DAQ source between 'SIMULATOR' and 'HARDWARE' (NI-DAQ IEPE + J1939 CAN).
+    """
+    try:
+        res = await hal_manager.set_source_mode(req.source_mode)
+        return res
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.post("/api/simulate/fault")
 def inject_fault(req: FaultInjectionRequest) -> Dict[str, Any]:
     """
-    Injects or clears an engine fault mode dynamically.
+    Dynamically injects or clears failure modes.
     """
     try:
         res = simulator.set_fault(req.fault_type, req.severity)
@@ -181,7 +233,7 @@ def inject_fault(req: FaultInjectionRequest) -> Dict[str, Any]:
 @app.post("/api/simulate/operating_point")
 def set_operating_point(req: OperatingPointRequest) -> Dict[str, Any]:
     """
-    Adjusts target engine RPM and mechanical load percentage.
+    Adjusts target RPM and load percentage on the dynamometer.
     """
     res = simulator.set_operating_point(req.rpm, req.load_pct)
     return res
@@ -190,7 +242,7 @@ def set_operating_point(req: OperatingPointRequest) -> Dict[str, Any]:
 @app.post("/api/baseline/train")
 def train_baseline(req: TrainBaselineRequest) -> Dict[str, Any]:
     """
-    Retrains the unsupervised Isolation Forest baseline on nominal operating conditions.
+    Retrains the Isolation Forest baseline on nominal operating envelope points.
     """
     result = anomaly_detector.train_baseline_synthetic(n_samples=req.n_samples)
     logger.info(f"Retrained baseline anomaly detector with {req.n_samples} samples.")
@@ -200,11 +252,24 @@ def train_baseline(req: TrainBaselineRequest) -> Dict[str, Any]:
 @app.get("/api/telemetry/snapshot")
 def get_telemetry_snapshot() -> Dict[str, Any]:
     """
-    Returns the latest instantaneous processed telemetry frame.
+    Returns the latest instantaneous multimodal telemetry snapshot.
     """
     if not latest_processed_frame:
         raise HTTPException(status_code=503, detail="Telemetry stream not initialized yet")
     return latest_processed_frame
+
+
+@app.post("/api/diagnostics/analyze")
+async def trigger_diagnostics_analysis() -> Dict[str, Any]:
+    """
+    Invokes the Gemini Diagnostics Agent to produce a structured root-cause analysis
+    and prescriptive technician inspection recommendations based on the current multimodal snapshot.
+    """
+    if not latest_processed_frame:
+        raise HTTPException(status_code=503, detail="No active telemetry available to analyze")
+
+    report = await diagnostics_agent.analyze_telemetry_snapshot(latest_processed_frame)
+    return report
 
 
 @app.websocket("/ws/telemetry")
@@ -212,14 +277,14 @@ async def websocket_telemetry_endpoint(websocket: WebSocket):
     """
     High-speed WebSocket streaming 10 Hz synchronized multimodal frames:
     - Downsampled biaxial waveforms (Radial-X, Radial-Y)
-    - Welch PSD / FFT spectrum bins with rotational order peaks
-    - Time-domain indicators (RMS, Kurtosis, Crest Factor, P2P)
+    - Synchronous Order Tracking peaks (1X, 2X, 4X, BPFO)
+    - ISO 10816-6 Engine Health Index (EHI) and sub-scores
+    - Welch PSD / FFT spectrum bins
     - Thermodynamic sanity validation
-    - Isolation Forest Anomaly Score & feature contributions
+    - Anomaly detection & feature attribution
     """
     await manager.connect(websocket)
     try:
-        # Keep connection open and accept incoming command messages if any
         while True:
             data = await websocket.receive_text()
             try:
@@ -229,6 +294,8 @@ async def websocket_telemetry_endpoint(websocket: WebSocket):
                     simulator.set_fault(msg.get("fault_type", "none"), msg.get("severity", 1.0))
                 elif action == "set_operating_point":
                     simulator.set_operating_point(msg.get("rpm"), msg.get("load_pct"))
+                elif action == "set_source_mode":
+                    await hal_manager.set_source_mode(msg.get("source_mode", "SIMULATOR"))
                 elif action == "retrain_baseline":
                     anomaly_detector.train_baseline_synthetic(n_samples=msg.get("n_samples", 500))
             except json.JSONDecodeError:

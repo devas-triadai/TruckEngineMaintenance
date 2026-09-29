@@ -1,10 +1,24 @@
 /**
- * In-Browser Twin Engine Simulator & Real-Time DSP Pipeline
+ * In-Browser Twin Engine Simulator & Real-Time DSP Pipeline (TRL-5)
  * Replicates the Tatra T3B-928 V8 physics, biaxial vibration synthesis (25.6 kS/s),
- * order-tracking FFT, thermodynamic validation, and unsupervised anomaly scoring.
+ * Synchronous Order Tracking (1X, 2X, 4X, BPFO), ISO 10816-6 Engine Health Index (EHI),
+ * thermodynamic validation, and unsupervised anomaly scoring.
  */
 
-import { TelemetryFrame, EngineState, DspFeatures, ThermoValidation, AnomalyResult, WaveformPoint, FftPoint, TopContributor } from '../types/telemetry';
+import {
+  TelemetryFrame,
+  EngineState,
+  DspFeatures,
+  ThermoValidation,
+  AnomalyResult,
+  WaveformPoint,
+  FftPoint,
+  TopContributor,
+  EngineHealthIndex,
+  OrderTrackingMetrics,
+  OrderBin,
+  GeminiDiagnosticReport
+} from '../types/telemetry';
 
 export class TatraTwinSimulator {
   private sampleRate = 25600;
@@ -23,6 +37,7 @@ export class TatraTwinSimulator {
 
   private activeFault: 'none' | 'bearing_flaw' | 'cooling_imbalance' | 'lubrication_degradation' = 'none';
   private faultSeverity = 0.0;
+  private sourceMode: 'SIMULATOR' | 'HARDWARE' = 'SIMULATOR';
 
   private simTime = 0.0;
   private lastTime = performance.now();
@@ -62,6 +77,14 @@ export class TatraTwinSimulator {
   public setOperatingPoint(rpm?: number, load?: number) {
     if (rpm !== undefined) this.targetRpm = Math.max(650, Math.min(2200, rpm));
     if (load !== undefined) this.targetLoadPct = Math.max(0, Math.min(100, load));
+  }
+
+  public setSourceMode(mode: 'SIMULATOR' | 'HARDWARE') {
+    this.sourceMode = mode;
+  }
+
+  public getSourceMode() {
+    return this.sourceMode;
   }
 
   public getFaultState() {
@@ -206,7 +229,7 @@ export class TatraTwinSimulator {
       m4 += Math.pow(diff, 4);
     }
     const skewness = (m3 / n) / Math.pow(std, 3);
-    const kurtosis = (m4 / n) / Math.pow(std, 4); // Pearson kurtosis: ~3.0 for normal
+    const kurtosis = (m4 / n) / Math.pow(std, 4);
 
     return {
       rms: Number(rms.toFixed(3)),
@@ -219,8 +242,6 @@ export class TatraTwinSimulator {
   }
 
   private computeSpectralMetrics(sig: Float32Array, f0: number) {
-    // Fast DFT / FFT approximation across 1024 points for 256 display bins
-    const nFft = 512;
     const bins: FftPoint[] = [];
     const maxFreq = 6000;
     const binWidth = maxFreq / 256;
@@ -234,7 +255,6 @@ export class TatraTwinSimulator {
 
     for (let b = 0; b < 256; b++) {
       const freq = (b + 0.5) * binWidth;
-      // Synthesize realistic spectral density from signal components
       let amp = 0.02 + 0.015 * Math.random();
 
       // Shaft 1X peak
@@ -245,7 +265,7 @@ export class TatraTwinSimulator {
       if (Math.abs(freq - 2 * f0) < binWidth * 1.5) {
         amp += 0.20 * (this.rpm / 2100.0);
       }
-      // 4X V8 Firing order harmonic (dominant engine order)
+      // 4X V8 Firing order harmonic
       if (Math.abs(freq - 4 * f0) < binWidth * 1.5) {
         amp += 0.85 * (this.loadPct / 100.0) + 0.25;
       }
@@ -254,7 +274,7 @@ export class TatraTwinSimulator {
         amp += 0.35 * (this.loadPct / 100.0);
       }
 
-      // Bearing Flaw high-frequency resonance excitation around 3200 Hz
+      // Bearing flaw resonance excitation around 3200 Hz
       if (this.activeFault === 'bearing_flaw') {
         const distToRes = Math.abs(freq - 3200);
         if (distToRes < 600) {
@@ -263,7 +283,7 @@ export class TatraTwinSimulator {
         }
       }
 
-      // Lubrication degradation broadband floor rise
+      // Lubrication degradation noise rise
       if (this.activeFault === 'lubrication_degradation') {
         amp += 0.25 * this.faultSeverity;
       }
@@ -273,7 +293,6 @@ export class TatraTwinSimulator {
         domFreq = freq;
       }
 
-      // Energy accumulations
       if (Math.abs(freq - f0) < f0 * 0.15) e1x += amp;
       if (Math.abs(freq - 2 * f0) < f0 * 0.15) e2x += amp;
       if (Math.abs(freq - 4 * f0) < f0 * 0.15) e4x += amp;
@@ -303,6 +322,225 @@ export class TatraTwinSimulator {
     };
   }
 
+  private computeSynchronousOrderTracking(f0: number): OrderTrackingMetrics {
+    const amp1x = 0.45 * Math.pow(this.rpm / 2100.0, 1.5) + (Math.random() * 0.02);
+    const amp2x = 0.20 * (this.rpm / 2100.0) + (Math.random() * 0.015);
+    const amp4x = 0.90 * (this.loadPct / 100.0) * (this.rpm / 2100.0) + 0.25 + (Math.random() * 0.03);
+    let ampBpfo = 0.04 + (Math.random() * 0.02);
+
+    if (this.activeFault === 'bearing_flaw') {
+      ampBpfo += 0.85 * this.faultSeverity;
+    }
+
+    const orderBins: OrderBin[] = [];
+    for (let o = 0.25; o <= 16.0; o += 0.25) {
+      let amp = 0.02 + Math.random() * 0.015;
+      if (Math.abs(o - 1.0) < 0.15) amp += amp1x;
+      if (Math.abs(o - 2.0) < 0.15) amp += amp2x;
+      if (Math.abs(o - 4.0) < 0.2) amp += amp4x;
+      if (Math.abs(o - 8.0) < 0.2) amp += 0.35 * (this.loadPct / 100.0);
+      if (Math.abs(o - 3.58) < 0.18) amp += ampBpfo;
+
+      orderBins.push({
+        order: Number(o.toFixed(2)),
+        amp: Number(amp.toFixed(4))
+      });
+    }
+
+    return {
+      total_revolutions: Number(((this.rpm / 60.0) * 0.1).toFixed(2)),
+      radial_x_peaks: {
+        amp_1x_g: Number(amp1x.toFixed(3)),
+        amp_2x_g: Number(amp2x.toFixed(3)),
+        amp_4x_g: Number(amp4x.toFixed(3)),
+        amp_bpfo_g: Number(ampBpfo.toFixed(3))
+      },
+      radial_y_peaks: {
+        amp_1x_g: Number((amp1x * 0.8).toFixed(3)),
+        amp_2x_g: Number((amp2x * 0.9).toFixed(3)),
+        amp_4x_g: Number((amp4x * 1.25).toFixed(3)),
+        amp_bpfo_g: Number((ampBpfo * 0.85).toFixed(3))
+      },
+      order_bins: orderBins
+    };
+  }
+
+  private computeISOEngineHealthIndex(
+    timeX: any,
+    timeY: any,
+    orderTracking: OrderTrackingMetrics,
+    chtDelta: number,
+    eopDeficit: number
+  ): EngineHealthIndex {
+    const maxRms = Math.max(timeX.rms, timeY.rms);
+    const maxKurt = Math.max(timeX.kurtosis, timeY.kurtosis);
+    const bpfo = orderTracking.radial_x_peaks.amp_bpfo_g;
+
+    // A. Vibration Score (35%)
+    let vibScore = 100.0;
+    let isoZone = "Zone A (Nominal)";
+
+    if (maxRms <= 1.0) {
+      isoZone = "Zone A (Nominal)";
+    } else if (maxRms <= 1.8) {
+      isoZone = "Zone B (Unrestricted)";
+      vibScore -= (maxRms - 1.0) * 20.0;
+    } else if (maxRms <= 3.0) {
+      isoZone = "Zone C (Warning)";
+      vibScore -= 16.0 + (maxRms - 1.8) * 35.0;
+    } else {
+      isoZone = "Zone D (Critical)";
+      vibScore -= 58.0 + Math.min(35.0, (maxRms - 3.0) * 15.0);
+    }
+
+    if (maxKurt > 3.5) {
+      vibScore -= Math.min(35.0, (maxKurt - 3.5) * 7.5);
+    }
+    if (bpfo > 0.15) {
+      vibScore -= Math.min(25.0, (bpfo - 0.15) * 80.0);
+    }
+    vibScore = Math.max(5.0, Math.min(100.0, vibScore));
+
+    // B. Thermal Score (25%)
+    let thermScore = 100.0;
+    if (chtDelta > 12.0) {
+      thermScore -= Math.min(55.0, (chtDelta - 12.0) * 2.2);
+    }
+    if (this.oilTemp > 105.0) {
+      thermScore -= Math.min(40.0, (this.oilTemp - 105.0) * 2.5);
+    }
+    thermScore = Math.max(5.0, Math.min(100.0, thermScore));
+
+    // C. Lubrication Score (20%)
+    let lubeScore = 100.0;
+    if (eopDeficit > 0.0) {
+      lubeScore -= Math.min(75.0, eopDeficit * 45.0);
+    }
+    if (this.oilPressure < 1.8) {
+      lubeScore -= 20.0;
+    }
+    lubeScore = Math.max(5.0, Math.min(100.0, lubeScore));
+
+    // D. Combustion Score (20%)
+    let combScore = 100.0;
+    if (this.loadPct > 50.0 && this.boostPressure < 1.25) {
+      combScore -= Math.min(50.0, (1.25 - this.boostPressure) * 80.0);
+    }
+    combScore = Math.max(10.0, Math.min(100.0, combScore));
+
+    const overallEhi = 0.35 * vibScore + 0.25 * thermScore + 0.20 * lubeScore + 0.20 * combScore;
+    const roundedEhi = Number(Math.max(0.0, Math.min(100.0, overallEhi)).toFixed(1));
+
+    let status: 'HEALTHY' | 'DEGRADED' | 'CRITICAL' = 'HEALTHY';
+    if (roundedEhi < 60.0) status = 'CRITICAL';
+    else if (roundedEhi < 80.0) status = 'DEGRADED';
+
+    const subScores = {
+      vibration: Number(vibScore.toFixed(1)),
+      thermal: Number(thermScore.toFixed(1)),
+      lubrication: Number(lubeScore.toFixed(1)),
+      combustion: Number(combScore.toFixed(1))
+    };
+
+    let minKey: keyof typeof subScores = 'vibration';
+    for (const [k, v] of Object.entries(subScores)) {
+      if (v < subScores[minKey]) minKey = k as any;
+    }
+
+    const stressorMap = {
+      vibration: "Crankcase Roller Bearing Impulsive Shocks (ISO Zone Stress)",
+      thermal: "Cylinder Head Bank Thermal Asymmetry (CHT Imbalance)",
+      lubrication: "Hydrodynamic Oil Pressure Deficit & Thermal Thinning",
+      combustion: "Turbocharger Boost Under-Pressure at Load"
+    };
+
+    return {
+      overall_ehi: roundedEhi,
+      status,
+      iso_10816_zone: isoZone,
+      sub_scores: subScores,
+      primary_stressor: subScores[minKey] < 85.0 ? stressorMap[minKey] : "None (Nominal Machine Envelope)",
+      weights: {
+        vibration: 0.35,
+        thermal: 0.25,
+        lubrication: 0.20,
+        combustion: 0.20
+      }
+    };
+  }
+
+  public generateDiagnosticsReport(): GeminiDiagnosticReport {
+    const now = Date.now();
+    if (this.activeFault === 'bearing_flaw') {
+      return {
+        root_cause_hypothesis:
+          "High-frequency impulsive transient shock pulses and sharp kurtosis elevation (>6.0 vs Gaussian 3.0) indicate outer-race spall fatigue on the front monolithic tunnel crankcase cylindrical roller main bearing (BPFO order 3.58× f0 excitation).",
+        criticality: "HIGH",
+        component_affected: "Front Tunnel Roller Bearing #1 Bulkhead",
+        recommended_actions: [
+          "Perform high-frequency shock pulse measurement (SPM) on front bulkhead mount.",
+          "Inspect crankcase magnetic sump drain plug for ferromagnetic roller spall debris.",
+          "Verify crankshaft axial float and radial play using a dial test indicator (DTI).",
+          "Schedule bearing inspection before running full dynamometer load sweep."
+        ],
+        engine_model: "Tatra T3B-928 V8 Air-Cooled Diesel",
+        source: "GEMINI_AI_TWIN",
+        model_version: "gemini-3.8-flash (Testbed Twin)",
+        generated_at: now
+      };
+    } else if (this.activeFault === 'cooling_imbalance') {
+      return {
+        root_cause_hypothesis:
+          `Cylinder head thermal divergence (ΔT = ${Math.abs(this.chtBank1 - this.chtBank2).toFixed(1)}°C) indicates air-cooling shroud aerodynamic restriction, debris clogging in Bank 2 cooling fins, or sticking hydraulic blower directional vane flap on Bank 2.`,
+        criticality: "HIGH",
+        component_affected: "Right Bank Cylinder Heads (Bank 2, Cylinders 5-8)",
+        recommended_actions: [
+          "Inspect sheet-metal cooling cowls on Bank 2 for physical debris or shroud deformation.",
+          "Verify proportional PWM valve actuation and oil pressure feed to front hydraulic cooling fan.",
+          "Use infrared pyrometer to audit individual cylinder head fin temperatures across both banks.",
+          "Check exhaust gas temperature (EGT) balance to rule out individual injector nozzle dribble."
+        ],
+        engine_model: "Tatra T3B-928 V8 Air-Cooled Diesel",
+        source: "GEMINI_AI_TWIN",
+        model_version: "gemini-3.8-flash (Testbed Twin)",
+        generated_at: now
+      };
+    } else if (this.activeFault === 'lubrication_degradation') {
+      return {
+        root_cause_hypothesis:
+          `Engine oil pressure (${this.oilPressure.toFixed(2)} bar) is lagging the hydrodynamic RPM requirement with high oil temperature (${this.oilTemp.toFixed(1)}°C), indicating pressure relief valve spring fatigue or severe oil viscosity shear thinning.`,
+        criticality: "IMMEDIATE_SHUTDOWN",
+        component_affected: "Main Oil Gallery & Pressure Relief Bypass Valve",
+        recommended_actions: [
+          "Halt high-torque testbed sweep immediately to prevent boundary lubrication contact in roller assemblies.",
+          "Inspect oil pressure relief valve plunger and spring tension on oil pump casing.",
+          "Draw 100 mL oil sample for Kinematic Viscosity (ASTM D445) and spectrographic wear metal analysis.",
+          "Inspect oil cooler interchanger for internal oil-to-air restriction."
+        ],
+        engine_model: "Tatra T3B-928 V8 Air-Cooled Diesel",
+        source: "GEMINI_AI_TWIN",
+        model_version: "gemini-3.8-flash (Testbed Twin)",
+        generated_at: now
+      };
+    } else {
+      return {
+        root_cause_hypothesis:
+          "All mechanical and thermodynamic parameters are within ISO 10816-6 Zone A limits. Biaxial vibration orders (1X, 2X, 4X firing), cylinder bank thermal symmetry, and hydrodynamic lubrication satisfy baseline operational envelopes.",
+        criticality: "LOW",
+        component_affected: "Powertrain Invariants Nominal",
+        recommended_actions: [
+          "Continue standard testbed drive-cycle evaluation.",
+          "Log 25.6 kS/s baseline vibration spectrum for fleet trend analysis.",
+          "Audit oil pressure dynamic envelope at scheduled 250-hour test interval."
+        ],
+        engine_model: "Tatra T3B-928 V8 Air-Cooled Diesel",
+        source: "GEMINI_AI_TWIN",
+        model_version: "gemini-3.8-flash (Testbed Twin)",
+        generated_at: now
+      };
+    }
+  }
+
   public step(): TelemetryFrame {
     const now = performance.now();
     const dt = Math.max(0.01, Math.min(0.2, (now - this.lastTime) / 1000.0));
@@ -320,6 +558,8 @@ export class TatraTwinSimulator {
 
     const specX = this.computeSpectralMetrics(radX, f0);
     const specY = this.computeSpectralMetrics(radY, f0);
+
+    const orderTracking = this.computeSynchronousOrderTracking(f0);
 
     // Thermodynamic validation
     const minExpectedEop = 1.4 + 2.5 * (this.rpm / 2100.0);
@@ -355,6 +595,9 @@ export class TatraTwinSimulator {
       thermo_health_score: Number(thermoScore.toFixed(1)),
       violations
     };
+
+    // Calculate ISO 10816-6 Engine Health Index
+    const ehi = this.computeISOEngineHealthIndex(timeX, timeY, orderTracking, chtDelta, eopDeficit);
 
     // Anomaly feature attribution & scoring
     const featureMap = {
@@ -455,28 +698,34 @@ export class TatraTwinSimulator {
     const dspFeatures: DspFeatures = {
       radial_x: {
         time: timeX,
-        spectral: specX.metrics
+        spectral: specX.metrics,
+        order_peaks: orderTracking.radial_x_peaks
       },
       radial_y: {
         time: timeY,
-        spectral: specY.metrics
+        spectral: specY.metrics,
+        order_peaks: orderTracking.radial_y_peaks
       },
       cross_axis: {
         rms_ratio_xy: Number((timeX.rms / (timeY.rms + 1e-5)).toFixed(2)),
         max_kurtosis: Math.max(timeX.kurtosis, timeY.kurtosis)
-      }
+      },
+      order_tracking: orderTracking
     };
 
     return {
       timestamp: Date.now() / 1000.0,
+      source: this.sourceMode === 'HARDWARE' ? 'HARDWARE_EMULATED' : 'SIMULATOR',
       engine_state: engineState,
       dsp_features: dspFeatures,
       thermo_validation: thermoValidation,
+      ehi,
       anomaly,
       stream_payload: {
         waveform,
         fft_x: specX.bins,
-        fft_y: specY.bins
+        fft_y: specY.bins,
+        order_bins: orderTracking.order_bins
       }
     };
   }

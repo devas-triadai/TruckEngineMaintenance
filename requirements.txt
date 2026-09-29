@@ -6,3 +6,6 @@ scikit-learn>=1.4.0
 pydantic>=2.6.0
 websockets>=12.0
 python-multipart>=0.0.9
+google-genai>=1.0.0
+python-can>=4.3.0
+nidaqmx>=0.9.0
