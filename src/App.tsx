@@ -1080,8 +1080,8 @@ export default function App() {
   const isDegradedOrCritical = (currentFrame?.ehi?.overall_ehi ?? 100) < 75;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-200">
-      {/* 3-Zone Top Bar with HAL Source Selector, Runs & Reports trigger, and Gemini AI */}
+    <div className="min-h-screen max-w-full overflow-x-hidden bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-200">
+      {/* 3-Zone Top Bar with HAL Source Selector, Runs & Reports trigger, and Offline AI */}
       <TopBar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -1116,23 +1116,28 @@ export default function App() {
       )}
 
       {/* Main Content Viewport */}
-      <main className="flex-1 max-w-[1520px] w-full mx-auto p-4 sm:p-6 space-y-6">
-        {/* Engine Health Banner with ISO 10816-6 EHI and Gemini trigger */}
-        <EngineHealthBanner
-          frame={currentFrame}
-          onClearFaults={() => handleInjectFault('none', 0)}
-          onOpenDiagnostics={handleRunDiagnostics}
-        />
-
+      <main className="flex-1 w-full max-w-full overflow-x-hidden">
         {/* Tab 1: Overview & Health */}
         {activeTab === 'overview' && (
-          <div className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 w-full max-w-7xl mx-auto">
+            {/* Full-width Engine Health Banner */}
+            <div className="col-span-1 lg:col-span-12 min-w-0">
+              <EngineHealthBanner
+                frame={currentFrame}
+                onClearFaults={() => handleInjectFault('none', 0)}
+                onOpenDiagnostics={handleRunDiagnostics}
+              />
+            </div>
+
             {/* Top Row: Synchronous Order Tracking + Dual-axis Oscilloscope */}
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+            <div className="col-span-1 lg:col-span-6 min-w-0">
               <OrderTrackingPanel
                 orderTracking={currentFrame?.dsp_features.order_tracking}
                 rpm={currentFrame?.engine_state.rpm ?? 1250}
               />
+            </div>
+
+            <div className="col-span-1 lg:col-span-6 min-w-0">
               <OscilloscopeCanvas
                 waveform={currentFrame?.stream_payload.waveform ?? []}
                 dsp={currentFrame?.dsp_features ?? null}
@@ -1141,14 +1146,16 @@ export default function App() {
             </div>
 
             {/* Second Row: Order Spectrum (Welch PSD) & ECU Instruments */}
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+            <div className="col-span-1 lg:col-span-6 min-w-0">
               <OrderSpectrumCanvas
                 fftX={currentFrame?.stream_payload.fft_x ?? []}
                 fftY={currentFrame?.stream_payload.fft_y ?? []}
                 dsp={currentFrame?.dsp_features ?? null}
                 rpm={currentFrame?.engine_state.rpm ?? 1250}
               />
+            </div>
 
+            <div className="col-span-1 lg:col-span-6 min-w-0">
               {currentFrame && (
                 <EcuGauges
                   state={currentFrame.engine_state}
@@ -1159,6 +1166,56 @@ export default function App() {
 
             {/* Fault Injection Matrix */}
             {currentFrame && (
+              <div className="col-span-1 lg:col-span-12 min-w-0">
+                <FaultInjectionPanel
+                  engineState={currentFrame.engine_state}
+                  onInjectFault={handleInjectFault}
+                  onSetOperatingPoint={handleSetOperatingPoint}
+                  onExportSnapshot={handleExportSnapshot}
+                  onRetrainBaseline={handleRetrainBaseline}
+                  isRetraining={isRetraining}
+                />
+              </div>
+            )}
+
+            {/* Flight Recorder Log Table */}
+            <div className="col-span-1 lg:col-span-12 min-w-0">
+              <TelemetryLogTable
+                history={history}
+                onClearHistory={() => setHistory([])}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Tab 2: Dedicated Order Tracking (COT) */}
+        {activeTab === 'orders' && currentFrame && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 w-full max-w-7xl mx-auto">
+            <div className="col-span-1 lg:col-span-12 min-w-0">
+              <EngineHealthBanner
+                frame={currentFrame}
+                onClearFaults={() => handleInjectFault('none', 0)}
+                onOpenDiagnostics={handleRunDiagnostics}
+              />
+            </div>
+
+            <div className="col-span-1 lg:col-span-12 min-w-0">
+              <OrderTrackingPanel
+                orderTracking={currentFrame.dsp_features.order_tracking}
+                rpm={currentFrame.engine_state.rpm}
+              />
+            </div>
+
+            <div className="col-span-1 lg:col-span-12 min-w-0">
+              <OrderSpectrumCanvas
+                fftX={currentFrame.stream_payload.fft_x}
+                fftY={currentFrame.stream_payload.fft_y}
+                dsp={currentFrame.dsp_features}
+                rpm={currentFrame.engine_state.rpm}
+              />
+            </div>
+
+            <div className="col-span-1 lg:col-span-12 min-w-0">
               <FaultInjectionPanel
                 engineState={currentFrame.engine_state}
                 onInjectFault={handleInjectFault}
@@ -1167,54 +1224,32 @@ export default function App() {
                 onRetrainBaseline={handleRetrainBaseline}
                 isRetraining={isRetraining}
               />
-            )}
-
-            {/* Flight Recorder Log Table */}
-            <TelemetryLogTable
-              history={history}
-              onClearHistory={() => setHistory([])}
-            />
-          </div>
-        )}
-
-        {/* Tab 2: Dedicated Order Tracking (COT) */}
-        {activeTab === 'orders' && currentFrame && (
-          <div className="space-y-6">
-            <OrderTrackingPanel
-              orderTracking={currentFrame.dsp_features.order_tracking}
-              rpm={currentFrame.engine_state.rpm}
-            />
-
-            <OrderSpectrumCanvas
-              fftX={currentFrame.stream_payload.fft_x}
-              fftY={currentFrame.stream_payload.fft_y}
-              dsp={currentFrame.dsp_features}
-              rpm={currentFrame.engine_state.rpm}
-            />
-
-            <FaultInjectionPanel
-              engineState={currentFrame.engine_state}
-              onInjectFault={handleInjectFault}
-              onSetOperatingPoint={handleSetOperatingPoint}
-              onExportSnapshot={handleExportSnapshot}
-              onRetrainBaseline={handleRetrainBaseline}
-              isRetraining={isRetraining}
-            />
+            </div>
           </div>
         )}
 
         {/* Tab 3: Biaxial Vibration DSP */}
         {activeTab === 'vibration' && currentFrame && (
-          <div className="space-y-6">
-            <OscilloscopeCanvas
-              waveform={currentFrame.stream_payload.waveform}
-              dsp={currentFrame.dsp_features}
-              activeFault={currentFrame.engine_state.active_fault}
-            />
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 w-full max-w-7xl mx-auto">
+            <div className="col-span-1 lg:col-span-12 min-w-0">
+              <EngineHealthBanner
+                frame={currentFrame}
+                onClearFaults={() => handleInjectFault('none', 0)}
+                onOpenDiagnostics={handleRunDiagnostics}
+              />
+            </div>
+
+            <div className="col-span-1 lg:col-span-12 min-w-0">
+              <OscilloscopeCanvas
+                waveform={currentFrame.stream_payload.waveform}
+                dsp={currentFrame.dsp_features}
+                activeFault={currentFrame.engine_state.active_fault}
+              />
+            </div>
 
             {/* Deep DSP Mathematical Analysis */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-3 font-mono text-xs">
+            <div className="col-span-1 lg:col-span-6 min-w-0">
+              <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 sm:p-5 space-y-3 font-mono text-xs">
                 <h4 className="text-sm font-semibold text-slate-100 font-sans flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-cyan-400" />
                   <span>Radial-X (Horizontal Bulkhead Mount) Metrics</span>
@@ -1252,8 +1287,10 @@ export default function App() {
                   </div>
                 </div>
               </div>
+            </div>
 
-              <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-3 font-mono text-xs">
+            <div className="col-span-1 lg:col-span-6 min-w-0">
+              <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 sm:p-5 space-y-3 font-mono text-xs">
                 <h4 className="text-sm font-semibold text-slate-100 font-sans flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
                   <span>Radial-Y (Vertical Bearing Crown Mount) Metrics</span>
@@ -1291,61 +1328,75 @@ export default function App() {
               </div>
             </div>
 
-            <FaultInjectionPanel
-              engineState={currentFrame.engine_state}
-              onInjectFault={handleInjectFault}
-              onSetOperatingPoint={handleSetOperatingPoint}
-              onExportSnapshot={handleExportSnapshot}
-              onRetrainBaseline={handleRetrainBaseline}
-              isRetraining={isRetraining}
-            />
+            <div className="col-span-1 lg:col-span-12 min-w-0">
+              <FaultInjectionPanel
+                engineState={currentFrame.engine_state}
+                onInjectFault={handleInjectFault}
+                onSetOperatingPoint={handleSetOperatingPoint}
+                onExportSnapshot={handleExportSnapshot}
+                onRetrainBaseline={handleRetrainBaseline}
+                isRetraining={isRetraining}
+              />
+            </div>
           </div>
         )}
 
         {/* Tab 4: Order Spectrum (FFT) */}
         {activeTab === 'spectrum' && currentFrame && (
-          <div className="space-y-6">
-            <OrderSpectrumCanvas
-              fftX={currentFrame.stream_payload.fft_x}
-              fftY={currentFrame.stream_payload.fft_y}
-              dsp={currentFrame.dsp_features}
-              rpm={currentFrame.engine_state.rpm}
-            />
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 w-full max-w-7xl mx-auto">
+            <div className="col-span-1 lg:col-span-12 min-w-0">
+              <EngineHealthBanner
+                frame={currentFrame}
+                onClearFaults={() => handleInjectFault('none', 0)}
+                onOpenDiagnostics={handleRunDiagnostics}
+              />
+            </div>
 
-            <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4">
-              <h4 className="text-sm font-semibold text-slate-100">
-                Rotational Order Tracking & Kinematic Defect Frequencies
-              </h4>
-              <p className="text-xs text-slate-400 leading-relaxed max-w-4xl">
-                Because the Tatra T3B-928 is an air-cooled 90° V8 4-stroke diesel, there are exactly 4 combustion cylinder firings per crankshaft revolution. The fundamental firing order harmonic occurs strictly at <strong>4.0X</strong> the shaft rotational frequency (f0 = RPM/60). Tunnel crankcase cylindrical roller bearings have a characteristic Ball Pass Frequency Outer Race (BPFO) of <strong>3.58X</strong> f0.
-              </p>
+            <div className="col-span-1 lg:col-span-12 min-w-0">
+              <OrderSpectrumCanvas
+                fftX={currentFrame.stream_payload.fft_x}
+                fftY={currentFrame.stream_payload.fft_y}
+                dsp={currentFrame.dsp_features}
+                rpm={currentFrame.engine_state.rpm}
+              />
+            </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs font-mono">
-                <div className="bg-slate-950/80 border border-slate-800 p-3 rounded-lg">
-                  <div className="text-sky-400 font-bold">1X SHAFT ORDER</div>
-                  <div className="text-lg font-bold text-slate-200 mt-1">
-                    {(currentFrame.engine_state.rpm / 60).toFixed(1)} Hz
+            <div className="col-span-1 lg:col-span-12 min-w-0">
+              <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 sm:p-5 space-y-4">
+                <h4 className="text-sm font-semibold text-slate-100">
+                  Rotational Order Tracking & Kinematic Defect Frequencies
+                </h4>
+                <p className="text-xs text-slate-400 leading-relaxed max-w-4xl">
+                  Because the Tatra T3B-928 is an air-cooled 90° V8 4-stroke diesel, there are exactly 4 combustion cylinder firings per crankshaft revolution. The fundamental firing order harmonic occurs strictly at <strong>4.0X</strong> the shaft rotational frequency (f0 = RPM/60). Tunnel crankcase cylindrical roller bearings have a characteristic Ball Pass Frequency Outer Race (BPFO) of <strong>3.58X</strong> f0.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs font-mono">
+                  <div className="bg-slate-950/80 border border-slate-800 p-3 rounded-lg">
+                    <div className="text-sky-400 font-bold">1X SHAFT ORDER</div>
+                    <div className="text-lg font-bold text-slate-200 mt-1">
+                      {(currentFrame.engine_state.rpm / 60).toFixed(1)} Hz
+                    </div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">Static / Dynamic Unbalance</div>
                   </div>
-                  <div className="text-[10px] text-slate-500 mt-0.5">Static / Dynamic Unbalance</div>
-                </div>
-                <div className="bg-slate-950/80 border border-slate-800 p-3 rounded-lg">
-                  <div className="text-emerald-400 font-bold">4X FIRING ORDER</div>
-                  <div className="text-lg font-bold text-slate-200 mt-1">
-                    {((currentFrame.engine_state.rpm / 60) * 4).toFixed(1)} Hz
+                  <div className="bg-slate-950/80 border border-slate-800 p-3 rounded-lg">
+                    <div className="text-emerald-400 font-bold">4X FIRING ORDER</div>
+                    <div className="text-lg font-bold text-slate-200 mt-1">
+                      {((currentFrame.engine_state.rpm / 60) * 4).toFixed(1)} Hz
+                    </div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">V8 Combustion Pressure Gas Load</div>
                   </div>
-                  <div className="text-[10px] text-slate-500 mt-0.5">V8 Combustion Pressure Gas Load</div>
-                </div>
-                <div className="bg-slate-950/80 border border-slate-800 p-3 rounded-lg">
-                  <div className="text-rose-400 font-bold">BPFO DEFECT</div>
-                  <div className="text-lg font-bold text-slate-200 mt-1">
-                    {((currentFrame.engine_state.rpm / 60) * 3.58).toFixed(1)} Hz
+                  <div className="bg-slate-950/80 border border-slate-800 p-3 rounded-lg">
+                    <div className="text-rose-400 font-bold">BPFO DEFECT</div>
+                    <div className="text-lg font-bold text-slate-200 mt-1">
+                      {((currentFrame.engine_state.rpm / 60) * 3.58).toFixed(1)} Hz
+                    </div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">Roller Outer Race Spall Shocks</div>
                   </div>
-                  <div className="text-[10px] text-slate-500 mt-0.5">Roller Outer Race Spall Shocks</div>
-                </div>
-                <div className="bg-slate-950/80 border border-slate-800 p-3 rounded-lg">
-                  <div className="text-amber-400 font-bold">STRUCTURAL HF BAND</div>
-                  <div className="text-lg font-bold text-slate-200 mt-1">2,000 – 6,000 Hz</div>
-                  <div className="text-[10px] text-slate-500 mt-0.5">Tunnel Crankcase Bulkhead Ringdown</div>
+                  <div className="bg-slate-950/80 border border-slate-800 p-3 rounded-lg">
+                    <div className="text-amber-400 font-bold">STRUCTURAL HF BAND</div>
+                    <div className="text-lg font-bold text-slate-200 mt-1">2,000 – 6,000 Hz</div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">Tunnel Crankcase Bulkhead Ringdown</div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1354,39 +1405,63 @@ export default function App() {
 
         {/* Tab 5: ECU & Thermodynamics */}
         {activeTab === 'ecu' && currentFrame && (
-          <div className="space-y-6">
-            <EcuGauges
-              state={currentFrame.engine_state}
-              thermo={currentFrame.thermo_validation}
-            />
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 w-full max-w-7xl mx-auto">
+            <div className="col-span-1 lg:col-span-12 min-w-0">
+              <EngineHealthBanner
+                frame={currentFrame}
+                onClearFaults={() => handleInjectFault('none', 0)}
+                onOpenDiagnostics={handleRunDiagnostics}
+              />
+            </div>
 
-            <FaultInjectionPanel
-              engineState={currentFrame.engine_state}
-              onInjectFault={handleInjectFault}
-              onSetOperatingPoint={handleSetOperatingPoint}
-              onExportSnapshot={handleExportSnapshot}
-              onRetrainBaseline={handleRetrainBaseline}
-              isRetraining={isRetraining}
-            />
+            <div className="col-span-1 lg:col-span-12 min-w-0">
+              <EcuGauges
+                state={currentFrame.engine_state}
+                thermo={currentFrame.thermo_validation}
+              />
+            </div>
+
+            <div className="col-span-1 lg:col-span-12 min-w-0">
+              <FaultInjectionPanel
+                engineState={currentFrame.engine_state}
+                onInjectFault={handleInjectFault}
+                onSetOperatingPoint={handleSetOperatingPoint}
+                onExportSnapshot={handleExportSnapshot}
+                onRetrainBaseline={handleRetrainBaseline}
+                isRetraining={isRetraining}
+              />
+            </div>
           </div>
         )}
 
         {/* Tab 6: Engine Schematic CAD */}
         {activeTab === 'schematic' && currentFrame && (
-          <div className="space-y-6">
-            <EngineSchematic
-              state={currentFrame.engine_state}
-              thermo={currentFrame.thermo_validation}
-            />
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 w-full max-w-7xl mx-auto">
+            <div className="col-span-1 lg:col-span-12 min-w-0">
+              <EngineHealthBanner
+                frame={currentFrame}
+                onClearFaults={() => handleInjectFault('none', 0)}
+                onOpenDiagnostics={handleRunDiagnostics}
+              />
+            </div>
 
-            <FaultInjectionPanel
-              engineState={currentFrame.engine_state}
-              onInjectFault={handleInjectFault}
-              onSetOperatingPoint={handleSetOperatingPoint}
-              onExportSnapshot={handleExportSnapshot}
-              onRetrainBaseline={handleRetrainBaseline}
-              isRetraining={isRetraining}
-            />
+            <div className="col-span-1 lg:col-span-12 min-w-0">
+              <EngineSchematic
+                state={currentFrame.engine_state}
+                thermo={currentFrame.thermo_validation}
+              />
+            </div>
+
+            <div className="col-span-1 lg:col-span-12 min-w-0">
+              <FaultInjectionPanel
+                engineState={currentFrame.engine_state}
+                onInjectFault={handleInjectFault}
+                onSetOperatingPoint={handleSetOperatingPoint}
+                onExportSnapshot={handleExportSnapshot}
+                onRetrainBaseline={handleRetrainBaseline}
+                isRetraining={isRetraining}
+              />
+            </div>
           </div>
         )}
       </main>
@@ -1401,7 +1476,7 @@ export default function App() {
         onExitReplay={handleExitReplay}
       />
 
-      {/* Gemini AI Diagnostics Slide-Over Drawer */}
+      {/* Offline Diagnostics Slide-Over Drawer */}
       <GeminiDiagnosticsModal
         isOpen={isDiagnosticsOpen}
         onClose={() => setIsDiagnosticsOpen(false)}
@@ -1425,21 +1500,21 @@ export default function App() {
       />
 
       {/* Footer */}
-      <footer className="border-t border-slate-800/80 bg-slate-950/80 px-6 py-4 mt-8">
-        <div className="max-w-[1520px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
+      <footer className="border-t border-slate-800 bg-slate-900/90 px-4 py-3 mt-auto w-full max-w-full overflow-x-hidden">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs text-slate-400">
           <div>
             Tatra T3B-928 V8 Heavy Diesel Predictive Maintenance System · TRL-6 Operational Testbed & Certification
           </div>
-          <div className="font-mono text-[11px] text-slate-400 flex items-center gap-3">
+          <div className="font-mono text-[11px] text-slate-400 flex items-center gap-2.5 flex-wrap">
             <span>Computed Order Tracking (COT)</span>
             <span>·</span>
             <span>ISO 10816-6 EHI</span>
             <span>·</span>
             <span>Telemetry Replay</span>
             <span>·</span>
-            <span>BEML Engineering Reports</span>
+            <span>BEML Reports</span>
             <span>·</span>
-            <span>Gemini 3.8 Flash</span>
+            <span>100% Offline AI</span>
           </div>
         </div>
       </footer>

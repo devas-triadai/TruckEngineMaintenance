@@ -484,8 +484,8 @@ export class TatraTwinSimulator {
           "Schedule bearing inspection before running full dynamometer load sweep."
         ],
         engine_model: "Tatra T3B-928 V8 Air-Cooled Diesel",
-        source: "GEMINI_AI_TWIN",
-        model_version: "gemini-3.8-flash (Testbed Twin)",
+        source: "RULE_BASED_EXPERT",
+        model_version: "Deterministic Expert Twin (Air-Gapped)",
         generated_at: now
       };
     } else if (this.activeFault === 'cooling_imbalance') {
@@ -501,8 +501,8 @@ export class TatraTwinSimulator {
           "Check exhaust gas temperature (EGT) balance to rule out individual injector nozzle dribble."
         ],
         engine_model: "Tatra T3B-928 V8 Air-Cooled Diesel",
-        source: "GEMINI_AI_TWIN",
-        model_version: "gemini-3.8-flash (Testbed Twin)",
+        source: "RULE_BASED_EXPERT",
+        model_version: "Deterministic Expert Twin (Air-Gapped)",
         generated_at: now
       };
     } else if (this.activeFault === 'lubrication_degradation') {
@@ -518,8 +518,8 @@ export class TatraTwinSimulator {
           "Inspect oil cooler interchanger for internal oil-to-air restriction."
         ],
         engine_model: "Tatra T3B-928 V8 Air-Cooled Diesel",
-        source: "GEMINI_AI_TWIN",
-        model_version: "gemini-3.8-flash (Testbed Twin)",
+        source: "RULE_BASED_EXPERT",
+        model_version: "Deterministic Expert Twin (Air-Gapped)",
         generated_at: now
       };
     } else {
@@ -534,8 +534,8 @@ export class TatraTwinSimulator {
           "Audit oil pressure dynamic envelope at scheduled 250-hour test interval."
         ],
         engine_model: "Tatra T3B-928 V8 Air-Cooled Diesel",
-        source: "GEMINI_AI_TWIN",
-        model_version: "gemini-3.8-flash (Testbed Twin)",
+        source: "RULE_BASED_EXPERT",
+        model_version: "Deterministic Expert Twin (Air-Gapped)",
         generated_at: now
       };
     }

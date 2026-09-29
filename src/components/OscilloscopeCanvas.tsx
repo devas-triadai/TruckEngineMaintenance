@@ -10,6 +10,8 @@ interface OscilloscopeCanvasProps {
 
 export const OscilloscopeCanvas: React.FC<OscilloscopeCanvasProps> = ({ waveform, dsp, activeFault }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [dimensions, setDimensions] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
   const [mode, setMode] = useState<'dual' | 'orbit'>('dual');
   const [timebase, setTimebase] = useState<number>(50); // ms
   const [scaleG, setScaleG] = useState<number>(5); // +/- g
@@ -17,6 +19,23 @@ export const OscilloscopeCanvas: React.FC<OscilloscopeCanvasProps> = ({ waveform
   const [showY, setShowY] = useState<boolean>(true);
   const [isFrozen, setIsFrozen] = useState<boolean>(false);
   const frozenWaveform = useRef<WaveformPoint[]>([]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          setDimensions({ width, height });
+        }
+      }
+    });
+
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
     if (!isFrozen && waveform.length > 0) {
@@ -32,11 +51,11 @@ export const OscilloscopeCanvas: React.FC<OscilloscopeCanvasProps> = ({ waveform
 
     // Handle high-DPI crisp rendering
     const dpr = window.devicePixelRatio || 1;
-    const width = canvas.clientWidth;
-    const height = canvas.clientHeight;
-    if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
-      canvas.width = width * dpr;
-      canvas.height = height * dpr;
+    const width = dimensions.width || canvas.clientWidth || 300;
+    const height = dimensions.height || canvas.clientHeight || 256;
+    if (canvas.width !== Math.floor(width * dpr) || canvas.height !== Math.floor(height * dpr)) {
+      canvas.width = Math.floor(width * dpr);
+      canvas.height = Math.floor(height * dpr);
     }
     ctx.resetTransform();
     ctx.scale(dpr, dpr);
@@ -164,7 +183,7 @@ export const OscilloscopeCanvas: React.FC<OscilloscopeCanvasProps> = ({ waveform
       ctx.fillText('RADIAL-X (HORIZONTAL ACCEL)', width - 180, centerY - 6);
       ctx.fillText('CLEARANCE ENVELOPE', centerX - 60, centerY - 3.7 * scaleFactor);
     }
-  }, [waveform, mode, scaleG, timebase, showX, showY, isFrozen]);
+  }, [waveform, mode, scaleG, timebase, showX, showY, isFrozen, dimensions]);
 
   const xKurt = dsp?.radial_x.time.kurtosis ?? 3.0;
   const yKurt = dsp?.radial_y.time.kurtosis ?? 3.0;
@@ -173,7 +192,7 @@ export const OscilloscopeCanvas: React.FC<OscilloscopeCanvasProps> = ({ waveform
   const xCf = dsp?.radial_x.time.crest_factor ?? 3.0;
 
   return (
-    <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 flex flex-col">
+    <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 flex flex-col w-full max-w-full min-w-0 overflow-hidden">
       {/* Header with Title & Controls */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
         <div className="flex items-center gap-3">
@@ -265,7 +284,7 @@ export const OscilloscopeCanvas: React.FC<OscilloscopeCanvasProps> = ({ waveform
       </div>
 
       {/* Main Canvas */}
-      <div className="relative w-full h-64 rounded-lg overflow-hidden border border-slate-800 bg-[#050811]">
+      <div ref={containerRef} className="relative w-full h-64 rounded-lg overflow-hidden border border-slate-800 bg-[#050811] min-w-0">
         <canvas ref={canvasRef} className="w-full h-full block cursor-crosshair" />
 
         {/* Live Kurtosis & Shock Alert Tag on Canvas */}

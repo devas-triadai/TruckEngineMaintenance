@@ -9,6 +9,8 @@ interface OrderTrackingPanelProps {
 
 export const OrderTrackingPanel: React.FC<OrderTrackingPanelProps> = ({ orderTracking, rpm }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [dimensions, setDimensions] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
   const [hoveredOrder, setHoveredOrder] = useState<OrderBin | null>(null);
 
   const peaks = orderTracking?.radial_x_peaks || {
@@ -20,6 +22,23 @@ export const OrderTrackingPanel: React.FC<OrderTrackingPanelProps> = ({ orderTra
 
   const orderBins = orderTracking?.order_bins || [];
 
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          setDimensions({ width, height });
+        }
+      }
+    });
+
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, []);
+
   // Canvas rendering of angular order spectrum
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -28,11 +47,11 @@ export const OrderTrackingPanel: React.FC<OrderTrackingPanelProps> = ({ orderTra
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
-    const width = canvas.clientWidth;
-    const height = canvas.clientHeight;
-    if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
-      canvas.width = width * dpr;
-      canvas.height = height * dpr;
+    const width = dimensions.width || canvas.clientWidth || 300;
+    const height = dimensions.height || canvas.clientHeight || 256;
+    if (canvas.width !== Math.floor(width * dpr) || canvas.height !== Math.floor(height * dpr)) {
+      canvas.width = Math.floor(width * dpr);
+      canvas.height = Math.floor(height * dpr);
     }
     ctx.resetTransform();
     ctx.scale(dpr, dpr);
@@ -155,7 +174,7 @@ export const OrderTrackingPanel: React.FC<OrderTrackingPanelProps> = ({ orderTra
       const px = padL + (o / 16.0) * plotW;
       ctx.fillText(`${o}X`, px - 6, height - 12);
     }
-  }, [orderBins, peaks]);
+  }, [orderBins, peaks, dimensions]);
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -187,7 +206,7 @@ export const OrderTrackingPanel: React.FC<OrderTrackingPanelProps> = ({ orderTra
   };
 
   return (
-    <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 space-y-4">
+    <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 sm:p-5 space-y-4 w-full max-w-full min-w-0 overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
         <div>
           <h3 className="text-sm font-semibold text-slate-100 flex items-center gap-2">
@@ -208,7 +227,7 @@ export const OrderTrackingPanel: React.FC<OrderTrackingPanelProps> = ({ orderTra
       </div>
 
       {/* Main Angular Order Canvas */}
-      <div className="relative w-full h-64 rounded-lg overflow-hidden border border-slate-800 bg-[#050811]">
+      <div ref={containerRef} className="relative w-full h-64 rounded-lg overflow-hidden border border-slate-800 bg-[#050811] min-w-0">
         <canvas
           ref={canvasRef}
           onMouseMove={handleMouseMove}

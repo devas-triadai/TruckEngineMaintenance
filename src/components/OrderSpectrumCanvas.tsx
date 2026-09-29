@@ -11,6 +11,8 @@ interface OrderSpectrumCanvasProps {
 
 export const OrderSpectrumCanvas: React.FC<OrderSpectrumCanvasProps> = ({ fftX, fftY, dsp, rpm }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [dimensions, setDimensions] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
   const [scaleMode, setScaleMode] = useState<'linear' | 'db'>('linear');
   const [selectedChannel, setSelectedChannel] = useState<'x' | 'y' | 'both'>('x');
   const [hoverInfo, setHoverInfo] = useState<{ freq: number; amp: number; order: string } | null>(null);
@@ -20,17 +22,34 @@ export const OrderSpectrumCanvas: React.FC<OrderSpectrumCanvasProps> = ({ fftX, 
   const bpfo = 3.58 * f0;
 
   useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          setDimensions({ width, height });
+        }
+      }
+    });
+
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, []);
+
+  useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
-    const width = canvas.clientWidth;
-    const height = canvas.clientHeight;
-    if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
-      canvas.width = width * dpr;
-      canvas.height = height * dpr;
+    const width = dimensions.width || canvas.clientWidth || 300;
+    const height = dimensions.height || canvas.clientHeight || 256;
+    if (canvas.width !== Math.floor(width * dpr) || canvas.height !== Math.floor(height * dpr)) {
+      canvas.width = Math.floor(width * dpr);
+      canvas.height = Math.floor(height * dpr);
     }
     ctx.resetTransform();
     ctx.scale(dpr, dpr);
@@ -176,7 +195,7 @@ export const OrderSpectrumCanvas: React.FC<OrderSpectrumCanvasProps> = ({ fftX, 
       const px = padL + (f / 6000.0) * plotW;
       ctx.fillText(`${f}Hz`, px - 12, height - 12);
     }
-  }, [fftX, fftY, scaleMode, selectedChannel, rpm]);
+  }, [fftX, fftY, scaleMode, selectedChannel, rpm, dimensions]);
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -222,7 +241,7 @@ export const OrderSpectrumCanvas: React.FC<OrderSpectrumCanvasProps> = ({ fftX, 
   const specX = dsp?.radial_x.spectral;
 
   return (
-    <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 flex flex-col">
+    <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 flex flex-col w-full max-w-full min-w-0 overflow-hidden">
       {/* Header and Controls */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
         <div className="flex items-center gap-3">
@@ -289,7 +308,7 @@ export const OrderSpectrumCanvas: React.FC<OrderSpectrumCanvasProps> = ({ fftX, 
       </div>
 
       {/* Spectrum Canvas */}
-      <div className="relative w-full h-64 rounded-lg overflow-hidden border border-slate-800 bg-[#050811]">
+      <div ref={containerRef} className="relative w-full h-64 rounded-lg overflow-hidden border border-slate-800 bg-[#050811] min-w-0">
         <canvas
           ref={canvasRef}
           onMouseMove={handleMouseMove}

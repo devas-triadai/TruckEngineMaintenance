@@ -32,7 +32,7 @@ from dsp.pipeline import EngineDSPPipeline
 from models.anomaly_detector import EngineAnomalyDetector
 from models.health_index import EngineHealthIndexCalculator
 from hal.manager import HALManager, DataSourceMode
-from ai.gemini_diagnostics import EngineDiagnosticsAgent
+from ai.local_diagnostics import LocalDiagnosticAgent
 from database.models import TestRun, TelemetryRecord, DiagnosticEvent
 from database.session import init_db, get_db, AsyncSessionLocal
 from reports.generator import BEMLReportGenerator
@@ -53,7 +53,7 @@ health_index_calc = EngineHealthIndexCalculator(
     weight_combustion=0.20
 )
 hal_manager = HALManager(simulator=simulator)
-diagnostics_agent = EngineDiagnosticsAgent()
+diagnostics_agent = LocalDiagnosticAgent(mode="auto")
 
 # Active Recording State
 class RecordingManager:

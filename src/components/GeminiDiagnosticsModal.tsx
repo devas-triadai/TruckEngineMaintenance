@@ -74,9 +74,11 @@ export const GeminiDiagnosticsModal: React.FC<GeminiDiagnosticsModalProps> = ({
 
   const exportReportMarkdown = () => {
     if (!report) return;
-    const md = `# TATRA T3B-928 V8 TESTBED - AI DIAGNOSTIC REPORT
+    const md = `# TATRA T3B-928 V8 TESTBED - OFFLINE EXPERT DIAGNOSTIC REPORT
 Generated: ${new Date().toISOString()}
-Model: ${report.model_version || 'gemini-3.8-flash'}
+Engine: ${report.engine_model || 'Tatra T3B-928 V8 Air-Cooled Diesel'}
+Source: ${report.source || 'RULE_BASED_EXPERT'}
+Model Version: ${report.model_version || 'BEML Deterministic Expert System'}
 Criticality: ${report.criticality}
 Component Affected: ${report.component_affected}
 
@@ -87,7 +89,7 @@ ${report.root_cause_hypothesis}
 ${report.recommended_actions.map((act, i) => `${i + 1}. [ ] ${act}`).join('\n')}
 
 ---
-Certified for BEML / Tatra 8x8 Powertrain Functional Validation (TRL-5)
+Certified for BEML / Tatra 8x8 Powertrain Functional Validation (TRL-6 Air-Gapped)
 `;
     const blob = new Blob([md], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
@@ -112,14 +114,14 @@ Certified for BEML / Tatra 8x8 Powertrain Functional Validation (TRL-5)
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-bold text-slate-100">
-                  Gemini AI Powertrain Diagnostics
+                  Offline Powertrain Diagnostics
                 </h3>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-950/60 border border-cyan-800 text-cyan-300">
-                  {report?.model_version || 'gemini-3.8-flash'}
+                  {report?.model_version || 'Rule-Based / Local Ollama'}
                 </span>
               </div>
               <div className="text-xs text-slate-400 font-mono mt-0.5">
-                TRL-5 Autonomous Root-Cause Maintenance Synthesis
+                TRL-6 Air-Gapped Root-Cause Maintenance Synthesis
               </div>
             </div>
           </div>
@@ -129,7 +131,7 @@ Certified for BEML / Tatra 8x8 Powertrain Functional Validation (TRL-5)
               onClick={onRunAnalysis}
               disabled={isLoading}
               className="p-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-cyan-400 transition-colors disabled:opacity-50"
-              title="Re-run Gemini AI Analysis"
+              title="Re-run Diagnostic Analysis"
             >
               <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
             </button>

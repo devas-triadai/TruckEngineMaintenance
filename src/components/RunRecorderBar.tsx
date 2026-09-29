@@ -51,12 +51,12 @@ export const RunRecorderBar: React.FC<RunRecorderBarProps> = ({
   };
 
   return (
-    <div className={`px-4 sm:px-6 py-2.5 border-b transition-colors ${
+    <div className={`w-full max-w-full px-4 py-2 border-b transition-colors overflow-x-hidden ${
       isRecording
         ? 'bg-rose-950/30 border-rose-900/50'
-        : 'bg-slate-900/70 border-slate-800/80'
+        : 'bg-slate-900/90 border-slate-800'
     }`}>
-      <div className="max-w-[1520px] mx-auto flex flex-wrap items-center justify-between gap-3 text-xs">
+      <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2.5 text-xs">
         {/* Left Side: Status / Recording Inputs */}
         <div className="flex flex-wrap items-center gap-3">
           {isRecording ? (
