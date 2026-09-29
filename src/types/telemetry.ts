@@ -146,7 +146,7 @@ export interface StreamPayload {
   order_bins?: OrderBin[];
 }
 
-export interface GeminiDiagnosticReport {
+export interface LocalDiagnosticReport {
   root_cause_hypothesis: string;
   criticality: 'LOW' | 'MEDIUM' | 'HIGH' | 'IMMEDIATE_SHUTDOWN';
   component_affected: string;

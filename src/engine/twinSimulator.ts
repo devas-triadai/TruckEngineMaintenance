@@ -17,7 +17,7 @@ import {
   EngineHealthIndex,
   OrderTrackingMetrics,
   OrderBin,
-  GeminiDiagnosticReport
+  LocalDiagnosticReport
 } from '../types/telemetry';
 
 export class TatraTwinSimulator {
@@ -469,7 +469,7 @@ export class TatraTwinSimulator {
     };
   }
 
-  public generateDiagnosticsReport(): GeminiDiagnosticReport {
+  public generateDiagnosticsReport(): LocalDiagnosticReport {
     const now = Date.now();
     if (this.activeFault === 'bearing_flaw') {
       return {

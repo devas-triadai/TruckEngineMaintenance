@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, Cpu, RefreshCw, Radio, Sparkles, HardDrive, FileText } from 'lucide-react';
+import { Activity, Cpu, RefreshCw, Radio, HardDrive, FileText, Wrench } from 'lucide-react';
 
 interface TopBarProps {
   activeTab: string;
@@ -42,8 +42,8 @@ export const TopBar: React.FC<TopBarProps> = ({
   ];
 
   return (
-    <header className="w-full max-w-full flex flex-wrap items-center justify-between px-4 py-2 bg-slate-900 border-b border-slate-800 gap-2 sticky top-0 z-40">
-      {/* Zone 1: Single text element wordmark */}
+    <header className="w-full max-w-full flex flex-wrap items-center justify-between px-4 py-2 bg-slate-900 border-b border-slate-800 gap-2 overflow-x-hidden sticky top-0 z-40">
+      {/* Zone 1: Title & System Status */}
       <div className="flex items-center gap-2.5 shrink-0">
         <div className="w-8 h-8 rounded bg-cyan-950/80 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
           <Activity className="w-4 h-4" />
@@ -71,7 +71,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-2.5 sm:px-3 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
                 isActive
                   ? 'bg-slate-800 text-cyan-300 shadow-sm border border-slate-700/80'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
@@ -88,12 +88,12 @@ export const TopBar: React.FC<TopBarProps> = ({
         {/* Runs & Reports Button */}
         <button
           onClick={onOpenHistory}
-          className="px-2.5 py-1 text-xs font-medium text-slate-300 bg-slate-950 hover:bg-slate-800 border border-slate-700/80 rounded-lg transition-colors whitespace-nowrap flex items-center gap-1.5 font-mono"
+          className="px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-950 hover:bg-slate-800 border border-slate-700/80 rounded-lg transition-colors whitespace-nowrap flex items-center gap-1.5 font-mono"
           title="View recorded test runs and generate BEML PDF/CSV inspection reports"
         >
           <FileText className="w-3.5 h-3.5 text-cyan-400" />
           <span className="hidden sm:inline">Runs & Reports</span>
-          <span className="bg-slate-800 px-1.5 py-0.2 rounded text-[10px] text-cyan-300">
+          <span className="bg-slate-800 px-1.5 py-0.5 rounded text-[10px] text-cyan-300">
             {totalHistoricalRuns}
           </span>
         </button>
@@ -104,7 +104,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           <div className="flex items-center bg-slate-950 border border-slate-800 rounded-lg p-0.5 text-xs font-mono">
             <button
               onClick={() => onToggleDaqSource('SIMULATOR')}
-              className={`px-2 py-0.5 rounded transition-colors whitespace-nowrap flex items-center gap-1 ${
+              className={`px-2.5 py-1 rounded transition-colors whitespace-nowrap flex items-center gap-1 ${
                 daqSource === 'SIMULATOR'
                   ? 'bg-cyan-950/90 text-cyan-300 font-medium border border-cyan-800/50'
                   : 'text-slate-400 hover:text-slate-200'
@@ -116,7 +116,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             </button>
             <button
               onClick={() => onToggleDaqSource('HARDWARE')}
-              className={`px-2 py-0.5 rounded transition-colors whitespace-nowrap flex items-center gap-1 ${
+              className={`px-2.5 py-1 rounded transition-colors whitespace-nowrap flex items-center gap-1 ${
                 daqSource === 'HARDWARE'
                   ? 'bg-amber-950/90 text-amber-300 font-medium border border-amber-800/50'
                   : 'text-slate-400 hover:text-slate-200'
@@ -132,7 +132,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           <div className="flex items-center bg-slate-950 border border-slate-800 rounded-lg p-0.5 text-xs font-mono">
             <button
               onClick={() => setConnectionMode('twin')}
-              className={`px-2 py-0.5 rounded transition-colors whitespace-nowrap flex items-center gap-1 ${
+              className={`px-2.5 py-1 rounded transition-colors whitespace-nowrap flex items-center gap-1 ${
                 connectionMode === 'twin'
                   ? 'bg-cyan-950/90 text-cyan-300 font-medium border border-cyan-800/50'
                   : 'text-slate-400 hover:text-slate-200'
@@ -143,7 +143,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             </button>
             <button
               onClick={() => setConnectionMode('websocket')}
-              className={`px-2 py-0.5 rounded transition-colors whitespace-nowrap flex items-center gap-1 ${
+              className={`px-2.5 py-1 rounded transition-colors whitespace-nowrap flex items-center gap-1 ${
                 connectionMode === 'websocket'
                   ? 'bg-emerald-950/90 text-emerald-300 font-medium border border-emerald-800/50'
                   : 'text-slate-400 hover:text-slate-200'
@@ -164,24 +164,24 @@ export const TopBar: React.FC<TopBarProps> = ({
         </div>
 
         {/* Offline Diagnostic Trigger & Baseline Retrain Group */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <button
             onClick={onOpenDiagnostics}
-            className={`px-2.5 py-1 text-xs font-medium rounded-lg border transition-all whitespace-nowrap flex items-center gap-1.5 font-mono ${
+            className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all whitespace-nowrap flex items-center gap-1.5 font-mono ${
               hasDiagnosticAlert
                 ? 'bg-rose-950/90 border-rose-600 text-rose-200 animate-pulse'
-                : 'bg-indigo-950/80 hover:bg-indigo-900 border-indigo-700/80 text-indigo-200'
+                : 'bg-cyan-950/80 hover:bg-cyan-900 border-cyan-700/80 text-cyan-200'
             }`}
             title="100% Offline / Open-Source Powertrain Diagnostics (Rule-Based & Local Ollama)"
           >
-            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Expert AI</span>
+            <Wrench className="w-3.5 h-3.5 text-cyan-400" />
+            <span>BEML Expert Analysis</span>
           </button>
 
           <button
             onClick={onRetrainBaseline}
             disabled={isRetraining}
-            className="p-1 text-slate-300 bg-slate-950 hover:bg-slate-800 border border-slate-700/80 rounded-lg transition-colors disabled:opacity-50"
+            className="p-2 text-slate-300 bg-slate-950 hover:bg-slate-800 border border-slate-700/80 rounded-lg transition-colors disabled:opacity-50"
             title="Retrain unsupervised baseline Isolation Forest on healthy operating manifold"
           >
             <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isRetraining ? 'animate-spin' : ''}`} />

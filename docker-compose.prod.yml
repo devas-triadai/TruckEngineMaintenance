@@ -21,7 +21,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - DATABASE_URL=sqlite+aiosqlite:////data/tatra_testbed.db
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OLLAMA_HOST=http://localhost:11434
     volumes:
       - testbed_data:/data
     restart: always

@@ -159,9 +159,10 @@ export const EngineHealthBanner: React.FC<EngineHealthBannerProps> = ({
             <button
               onClick={onOpenDiagnostics}
               className="px-3.5 py-2 text-xs font-medium text-slate-950 bg-cyan-400 hover:bg-cyan-300 rounded-lg transition-colors whitespace-nowrap flex items-center gap-1.5 font-mono shadow-md"
+              title="Run 100% Offline BEML Expert Diagnostics on internal DSP anomaly vectors"
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Inspect with Gemini AI</span>
+              <Activity className="w-3.5 h-3.5" />
+              <span>BEML Expert Analysis</span>
             </button>
 
             {engine_state.active_fault !== 'none' && (

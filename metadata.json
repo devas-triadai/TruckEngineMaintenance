@@ -2,5 +2,7 @@
   "name": "Tatra T3B-928 V8 Predictive Maintenance Testbed",
   "description": "TRL-6 Industrial IoT & Edge AI Predictive Maintenance system for the Tatra 8x8 T3B-928 V8 air-cooled diesel engine with persistent test-run database, telemetry replay engine, BEML PDF/CSV report generator, ISO 10816-6 EHI, and 100% offline open-source diagnostic engine.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

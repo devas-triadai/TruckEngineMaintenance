@@ -293,7 +293,7 @@ class BEMLReportGenerator:
         story.append(Paragraph(subsystem_text, body_style))
         story.append(Spacer(1, 10))
 
-        # 5. Gemini AI Root-Cause Diagnostic Log
+        # 5. BEML Expert / Offline Diagnostic Log
         story.append(Paragraph("3. EDGE AI DIAGNOSTIC EVENTS & TECHNICIAN LOG", section_style))
         if not diagnostic_events:
             story.append(Paragraph("<i>No anomalous events or AI fault triggers recorded during this operational run. Machine baseline verified.</i>", body_style))

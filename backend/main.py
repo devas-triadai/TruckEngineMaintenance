@@ -4,7 +4,7 @@ Production Hardened & Fully Operational:
 - Hardware Abstraction Layer (HAL): NI-DAQ IEPE & SAE J1939 CAN transceiver
 - Synchronous Order Tracking (SOT): Computed Order Tracking for 1X, 2X, 4X firing orders
 - ISO 10816-6 Engine Health Index (EHI) Calculator
-- Gemini AI Root-Cause Diagnostic Agent
+- 100% Offline / Open-Source Local Diagnostic Agent (Rule-Based & Local Ollama)
 - Persistent Test-Run Database: SQLite (aiosqlite) / PostgreSQL (asyncpg)
 - Telemetry Replay Engine: CSV upload, run history scrubbing & playback
 - BEML Engineering Report Generator: PDF & CSV export
@@ -409,7 +409,7 @@ def get_telemetry_snapshot() -> Dict[str, Any]:
 
 
 # -------------------------------------------------------------
-# 3. Gemini AI Diagnostics
+# 3. Offline / Open-Source Local Diagnostics (100% Air-Gapped)
 # -------------------------------------------------------------
 @app.post("/api/diagnostics/analyze")
 async def run_diagnostics_analysis(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:

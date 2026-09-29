@@ -7,7 +7,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { TatraTwinSimulator } from './engine/twinSimulator';
 import {
   TelemetryFrame,
-  GeminiDiagnosticReport,
+  LocalDiagnosticReport,
   TestRun,
   RecordingStatus,
   ReplayStatus
@@ -21,7 +21,7 @@ import { EcuGauges } from './components/EcuGauges';
 import { FaultInjectionPanel } from './components/FaultInjectionPanel';
 import { EngineSchematic } from './components/EngineSchematicModal';
 import { TelemetryLogTable } from './components/TelemetryLogTable';
-import { GeminiDiagnosticsModal } from './components/GeminiDiagnosticsModal';
+import { LocalDiagnosticsModal } from './components/LocalDiagnosticsModal';
 import { RunRecorderBar } from './components/RunRecorderBar';
 import { ReplayControlBar } from './components/ReplayControlBar';
 import { HistoricalRunsModal } from './components/HistoricalRunsModal';
@@ -96,9 +96,9 @@ export default function App() {
   const [isRetraining, setIsRetraining] = useState<boolean>(false);
   const [notification, setNotification] = useState<string | null>(null);
 
-  // Gemini Diagnostics State
+  // 100% Offline Local Diagnostics State
   const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState<boolean>(false);
-  const [diagnosticReport, setDiagnosticReport] = useState<GeminiDiagnosticReport | null>(null);
+  const [diagnosticReport, setDiagnosticReport] = useState<LocalDiagnosticReport | null>(null);
   const [isLoadingDiagnostics, setIsLoadingDiagnostics] = useState<boolean>(false);
 
   // TRL-6 Test Runs & Persistence State
@@ -463,7 +463,7 @@ export default function App() {
     setTimeout(() => setNotification(null), 3000);
   };
 
-  // Run Gemini AI Root-Cause Diagnostics
+  // Run 100% Offline Local Root-Cause Diagnostics
   const handleRunDiagnostics = async () => {
     setIsLoadingDiagnostics(true);
     setIsDiagnosticsOpen(true);
@@ -473,7 +473,7 @@ export default function App() {
       try {
         const res = await fetch('/api/diagnostics/analyze', { method: 'POST' });
         if (res.ok) {
-          const report: GeminiDiagnosticReport = await res.json();
+          const report: LocalDiagnosticReport = await res.json();
           setDiagnosticReport(report);
           setIsLoadingDiagnostics(false);
           return;
@@ -1476,8 +1476,8 @@ export default function App() {
         onExitReplay={handleExitReplay}
       />
 
-      {/* Offline Diagnostics Slide-Over Drawer */}
-      <GeminiDiagnosticsModal
+      {/* 100% Offline Local Diagnostics Slide-Over Drawer */}
+      <LocalDiagnosticsModal
         isOpen={isDiagnosticsOpen}
         onClose={() => setIsDiagnosticsOpen(false)}
         report={diagnosticReport}
